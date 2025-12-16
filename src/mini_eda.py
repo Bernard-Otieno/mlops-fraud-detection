@@ -14,25 +14,56 @@ print("\nMessage length by fraud status:")
 print(df.groupby('is_fraud')['message_length'].mean())
 
 # Question 3: Visualize it!
-plt.figure(figsize=(10, 5))
+fig, axs = plt.subplots(1, 3, figsize=(18, 5))
 
 # Plot 1: Fraud distribution
-plt.subplot(1, 2, 1)
-df['is_fraud'].value_counts().plot(kind='bar', color=['green', 'red'])
-plt.title('Fraud vs Legitimate')
-plt.xlabel('Is Fraud')
-plt.ylabel('Count')
+df['is_fraud'].value_counts().plot(
+    kind='bar',
+    ax=axs[0],
+    color=['green', 'red']
+)
+axs[0].set_title('Fraud vs Legitimate')
+axs[0].set_xlabel('Is Fraud')
+axs[0].set_ylabel('Count')
 
-# Plot 2: Valid sender by fraud
-plt.subplot(1, 2, 2)
+# Plot 2: Valid sender vs Fraud
 fraud_by_sender = df.groupby(['is_valid_sender', 'is_fraud']).size().unstack()
-fraud_by_sender.plot(kind='bar', color=['green', 'red'])
-plt.title('Valid Sender vs Fraud')
-plt.xlabel('Is Valid Sender')
-plt.legend(['Legitimate', 'Fraud'])
+fraud_by_sender.plot(
+    kind='bar',
+    ax=axs[1],
+    color=['green', 'red']
+)
+axs[1].set_title('Valid Sender vs Fraud')
+axs[1].set_xlabel('Is Valid Sender')
+axs[1].legend(['Legitimate', 'Fraud'])
+
+# Plot 3: Has Link vs Fraud
+has_link = df.groupby(['has_link', 'is_fraud']).size().unstack()
+has_link.plot(
+    kind='bar',
+    ax=axs[2],
+    color=['green', 'red']
+)
+axs[2].set_title('Has Link vs Fraud')
+axs[2].set_xlabel('Has Link')
+axs[2].legend(['Legitimate', 'Fraud'])
 
 plt.tight_layout()
 plt.savefig('my_first_eda.png')
 plt.show()
 
-print("\n✅ Saved plot to my_first_eda.png")
+# Question 4: Distribution of message lengths vs fraud
+fig, ax = plt.subplots(figsize=(6, 4))
+
+df['message_length'].plot(kind='hist', bins=30, ax=ax)
+df[df['is_fraud'] == 1]['message_length'].plot(
+    kind='hist', bins=30, ax=ax, color='red', alpha=0.5
+)
+ax.set_title('Distribution of Message Lengths vs Fraud')
+
+plt.tight_layout()
+plt.show()
+
+
+
+# print("\n✅ Saved plot to my_first_eda.png")
