@@ -1,87 +1,152 @@
 import pandas as pd
 import re
+import os
 
-def extract_features(message_text, sender_id):
-    """
-    Extract 5 simple features from an SMS
-    
-    Returns a dictionary with features
-    """
+# -----------------------------
+# Constants
+# -----------------------------
+
+OFFICIAL_DOMAINS = [
+    "safaricom.co.ke",
+    "mpesa.co.ke",
+    "m-pesa.com"
+]
+
+SHORTENERS = [
+    "bit.ly",
+    "tinyurl.com"
+]
+
+URGENT_WORDS = [
+    "urgent", "immediately", "verify", "confirm",
+    "suspended", "blocked", "unlock", "security",
+    "alert", "claim", "winner", "prize"
+]
+
+SPELLING_ERRORS = [
+    "confimed", "payed", "balanse",
+    "ballance", "trasaction", "transction"
+]
+
+# -----------------------------
+# Helper functions
+# -----------------------------
+
+def find_links(text):
+    pattern = r'(http[s]?://[^\s]+|www\.[^\s]+)'
+    return re.findall(pattern, text.lower())
+
+def extract_link_features(text):
     features = {}
 
-    features['is_valid_sender'] = sender_id == 'MPESA'
-    features['message_length'] = len(message_text)
-    features['has_pin_word'] = 1 if re.search(r'\bpin\b', message_text.lower()) else 0
-    amounts =re.findall(r'\d+', message_text)
-    features['amount_count'] = len(amounts)
-    features['has_confirmed'] = 'confirmed' in message_text.lower()
-    link_patterns = ['http', 'https', 'www.', 'bit.ly', 'tinyurl']
-    features['has_link'] = 1 if any(pattern in message_text.lower() for pattern in link_patterns) else 0    
-    features['exclamation_count'] = message_text.count('!')
-    urgent_pattern = r'\b(urgent|immediately|asap|suspended|blocked|expire)\b'
-    features['has_urgent_word'] = 1 if re.search(urgent_pattern, message_text.lower()) else 0
-    
+    links = find_links(text)
+    text_lower = text.lower()
+
+    features["has_link"] = int(len(links) > 0)
+    features["link_count"] = len(links)
+
+    features["has_shortened_link"] = int(
+        any(short in link for link in links for short in SHORTENERS)
+    )
+
+    features["has_official_domain"] = int(
+        any(domain in text_lower for domain in OFFICIAL_DOMAINS)
+    )
+
+    # Link position
+    if links:
+        first_pos = text_lower.find(links[0])
+        ratio = first_pos / max(len(text_lower), 1)
+        features["link_at_start"] = int(ratio < 0.3)
+        features["link_at_end"] = int(ratio > 0.7)
+    else:
+        features["link_at_start"] = 0
+        features["link_at_end"] = 0
+
+    # Link + urgency context
+    features["link_with_urgency"] = 0
+    if links:
+        for link in links:
+            pos = text_lower.find(link)
+            context = text_lower[max(0, pos-30):pos+30]
+            if any(word in context for word in URGENT_WORDS):
+                features["link_with_urgency"] = 1
+                break
+
+    # Link without transaction keywords
+    has_transaction = ("confirmed" in text_lower) and ("ksh" in text_lower)
+    features["link_without_transaction"] = int(
+        features["has_link"] and not has_transaction
+    )
 
     return features
 
-#test the function
-# Test cases
-# test_cases = [
-#     ("Lucy Kiplagat sent money", False),  # Should NOT match
-#     ("Send your PIN now", True),          # Should match
-#     ("Enter PIN to confirm", True),       # Should match
-#     ("Shopping at the mall", False),      # Should NOT match
-#     ("Your pin code is required", True),  # Should match
-# ]
+# -----------------------------
+# Main feature extractor
+# -----------------------------
 
-# print("\n🧪 Testing PIN detection:")
-# print("="*60)
-# for text, expected in test_cases:
-#     # Test with word boundary
-#     result = bool(re.search(r'\bpin\b', text.lower()))
-#     status = "✅" if result == expected else "❌"
-#     print(f"{status} '{text[:30]}...' → {result} (expected {expected})")
+def extract_features(message_text, sender_id):
+    features = {}
 
-def process_all_messages(csv_path):
-    """Process all messages and extract features"""
-    
-    # Load data
-    df = pd.read_csv(csv_path)
-    print(f"Processing {len(df)} messages...")
-    
-    # Store all features
-    all_features = []
-    
-    # Loop through each message
-    for idx, row in df.iterrows():
-        # Extract features for this message
-        features = extract_features(row['message_text'], row['sender_id'])
-        all_features.append(features)
-        
-        # Progress update
-        if (idx + 1) % 1000 == 0:
-            print(f"  Processed {idx + 1}/{len(df)}...")
-    
-    # Convert to DataFrame
-    features_df = pd.DataFrame(all_features)
-    
-    # Combine with original data
-    result = pd.concat([df, features_df], axis=1)
-    
-    return result
+    text = str(message_text)
+    text_lower = text.lower()
 
-# Run it!
+    # ---- Sender features ----
+    sender_norm = str(sender_id).replace("-", "").upper()
+    features["is_valid_sender"] = int(sender_norm == "MPESA")
+    features["sender_is_numeric"] = int(sender_id.startswith("+254") or sender_id.isdigit())
+    features["sender_length"] = len(sender_id)
+
+    # ---- Text structure ----
+    features["message_length"] = len(text)
+    features["exclamation_count"] = text.count("!")
+    features["has_confirmed"] = int("confirmed" in text_lower)
+    features["has_ksh"] = int("ksh" in text_lower)
+
+    # ---- Amount features ----
+    amounts = re.findall(r'Ksh\s?([\d,]+(?:\.\d+)?)', text)
+    features["amount_count"] = len(amounts)
+
+    # ---- Fraud language ----
+    features["has_pin_word"] = int(bool(re.search(r'\bpin\b', text_lower)))
+    has_urgent_word = int(any(word in text_lower for word in URGENT_WORDS))
+    features["urgent_without_transaction"] = int(has_urgent_word == 1 and features["has_confirmed"] == 0)
+    features["has_spelling_error"] = int(any(err in text_lower for err in SPELLING_ERRORS))
+
+    # ---- Link features ----
+    link_features = extract_link_features(text)
+    features.update(link_features)
+
+    return features
+
+# -----------------------------
+# Dataset-level processing
+# -----------------------------
+
+def process_dataset(input_csv, output_csv):
+    df = pd.read_csv(input_csv)
+    print(f"🔧 Extracting features from {len(df):,} messages...")
+
+    feature_rows = []
+    for _, row in df.iterrows():
+        feats = extract_features(row["message_text"], row["sender_id"])
+        feature_rows.append(feats)
+
+    features_df = pd.DataFrame(feature_rows)
+    final_df = pd.concat([df, features_df], axis=1)
+
+    os.makedirs(os.path.dirname(output_csv), exist_ok=True)
+    final_df.to_csv(output_csv, index=False)
+
+    print(f"✅ Features saved to {output_csv}")
+    return final_df
+
+# -----------------------------
+# Entry point
+# -----------------------------
+
 if __name__ == "__main__":
-    result_df = process_all_messages('data/raw/mpesa_sms_messages.csv')
-    
-    # Save
-    result_df.to_csv('data/processed/my_features.csv', index=False)
-    print(f"\n✅ Saved {len(result_df)} messages with features!")
-    
-    # Show correlation with fraud
-    print("\nFeature correlation with fraud:")
-    feature_cols = ['is_valid_sender', 'message_length', 'has_pin_word', 
-                    'amount_count', 'has_confirmed', 'has_link', 'exclamation_count', 'has_urgent_word']
-    for col in feature_cols:
-        corr = result_df[[col, 'is_fraud']].corr().iloc[0, 1]
-        print(f"  {col:20s}: {corr:+.3f}")
+    process_dataset(
+        input_csv="data/raw/mpesa_sms_messages.csv",
+        output_csv="data/processed/mpesa_sms_features.csv"
+    )
