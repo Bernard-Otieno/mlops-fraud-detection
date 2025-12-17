@@ -1,3 +1,4 @@
+from email.mime import text
 import pandas as pd
 import re
 import os
@@ -92,15 +93,25 @@ def extract_features(message_text, sender_id):
     text_lower = text.lower()
 
     # ---- Sender features ----
+    
     sender_norm = str(sender_id).replace("-", "").upper()
     features["is_valid_sender"] = int(sender_norm == "MPESA")
     features["sender_is_numeric"] = int(sender_id.startswith("+254") or sender_id.isdigit())
     features["sender_length"] = len(sender_id)
+        # Local Kenyan Pattern
+    kenyan_pattern = r'\b(07|01|\+2547|\+2541)[0-9]{8}\b'
+    # Global International Pattern (looks for + followed by country code)
+    global_pattern = r'\+\d{1,3}\s?\d{4,12}'
+
+    features['contains_local_number'] = int(bool(re.search(kenyan_pattern, text)))
+    features['contains_foreign_number'] = int(bool(re.search(global_pattern, text)) and not bool(re.search(kenyan_pattern, text)))
 
     # ---- Text structure ----
     features["message_length"] = len(text)
     features["exclamation_count"] = text.count("!")
     features["has_confirmed"] = int("confirmed" in text_lower)
+    is_confirmed_msg = "confirmed" in text_lower
+    features["sender_id_mismatch"] = int(is_confirmed_msg and sender_norm != "MPESA")
     features["has_ksh"] = int("ksh" in text_lower)
 
     # ---- Amount features ----
@@ -112,11 +123,24 @@ def extract_features(message_text, sender_id):
     has_urgent_word = int(any(word in text_lower for word in URGENT_WORDS))
     features["urgent_without_transaction"] = int(has_urgent_word == 1 and features["has_confirmed"] == 0)
     features["has_spelling_error"] = int(any(err in text_lower for err in SPELLING_ERRORS))
+    # 2. Panic Signals: Count exclamation marks
+    features['exclamation_count'] = text.count('!')
+    # 3. Urgency Screaming: Count words that are fully CAPITALIZED (excluding 'KSH')
+    all_caps_words = re.findall(r'\b[A-Z]{3,}\b', text)
+    features['all_caps_count'] = len([w for w in all_caps_words if w != 'KSH'])
 
     # ---- Link features ----
+    links = find_links(text)
+    is_phishy_link = 0
+    if len(links) > 0:
+        # If there is a link, check if ANY of the official domains are inside it
+        is_official = any(dom in links[0] for dom in OFFICIAL_DOMAINS)
+        is_phishy_link = 1 if not is_official else 0
+    features["is_phishy_link"] = is_phishy_link
+
+
     link_features = extract_link_features(text)
     features.update(link_features)
-
     return features
 
 # -----------------------------

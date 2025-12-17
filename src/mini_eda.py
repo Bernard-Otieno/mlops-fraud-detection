@@ -49,7 +49,6 @@ axs[2].set_xlabel('Has Link')
 axs[2].legend(['Legitimate', 'Fraud'])
 
 plt.tight_layout()
-plt.savefig('my_first_eda.png')
 plt.show()
 
 # Question 4: Distribution of message lengths vs fraud

@@ -291,7 +291,26 @@ def generate_fraud_sms(msg_id, fraud_type):
         new_balance = round(random.uniform(1000000, 15000000), 2)
         
         sms = f"Confirmed. You have received Ksh{huge_amount:.2f} from {sender_name} {sender_number} on {date_str} at {time_str} New M-PESA balance is Ksh{new_balance:.2f}."
-    
+    elif fraud_type == 'smart_reversal':
+        # Perfectly formatted receipt from the 'Official' sender
+        sender_id = 'MPESA'
+        sender_name = generate_kenyan_name()
+        sender_number = generate_phone_number()
+        date_str = f"{timestamp.day}/{timestamp.month}/{timestamp.strftime('%y')}"
+        time_str = timestamp.strftime("%I.%M %p").lstrip("0")
+        sms = f"Confirmed. You have received Ksh{amount:.2f} from {sender_name} {sender_number} on {date_str} at {time_str} New M-PESA balance is Ksh{random.uniform(5000, 20000):.2f}."
+
+    elif fraud_type == 'smart_phish':
+        # Uses a URL that looks like the real Safaricom domain
+        sender_id = 'MPESA'
+        fake_domain = random.choice(["safaricom-portal.co.ke", "mpesa-security-update.com", "safaricom-care.net"])
+        sms = f"M-PESA Alert: Suspicious activity detected on your account. To secure your funds, please verify your identity at https://{fake_domain}/verify."
+
+    elif fraud_type == 'smart_social':
+        # High-pressure social engineering with no links or errors
+        sender_id = 'MPESA'
+        sms = "IMPORTANT: Due to updated Safaricom regulations, your M-PESA PIN will expire in 24 hours. To prevent account suspension, call our security desk on 0700000000 immediately."
+
     else:  # grammar_errors
         sender_id = 'MPESA'
         recipient = generate_kenyan_name()
