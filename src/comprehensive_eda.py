@@ -46,28 +46,39 @@ df = pd.read_csv("data/processed/mpesa_sms_features.csv")
 # print("\nCrosstab of Has PIN Word vs Urgent without Transaction:\n", pin_urgent_crosstab)
 
 
-sns.set(style="whitegrid")
+# sns.set(style="whitegrid")
 
-# Plot 1: Target Balance
-plt.figure(figsize=(6,4))
-sns.countplot(x="is_fraud", data=df, palette='Set2')
-plt.title("Fraud vs Legitimate Messages")
-plt.show()
+# # Plot 1: Target Balance
+# plt.figure(figsize=(6,4))
+# sns.countplot(x="is_fraud", data=df, palette='Set2')
+# plt.title("Fraud vs Legitimate Messages")
+# plt.show()
 
 
 
-# Feature Importance (correlation)
-plt.figure(figsize=(10,8))
-cols = ['is_fraud', 'message_length', 'has_link', 'has_shortened_link', 'has_pin_word', 'urgent_without_transaction']
-corr = df[cols].corr()
-sns.heatmap(corr, annot=True, cmap='RdBu', center=0)
-plt.title("Feature Correlation Heatmap")
-plt.savefig('figures/feature_correlation_heatmap.png')
-plt.show()
+# # Feature Importance (correlation)
+# plt.figure(figsize=(10,8))
+# cols = ['is_fraud', 'message_length', 'has_link', 'has_shortened_link', 'has_pin_word', 'urgent_without_transaction']
+# corr = df[cols].corr()
+# sns.heatmap(corr, annot=True, cmap='RdBu', center=0)
+# plt.title("Feature Correlation Heatmap")
+# plt.show()
 
-# --- GRAPH 3: DATA DISTRIBUTION ---
-# Do fraud messages have a different 'shape' than real ones?
-plt.figure(figsize=(8, 5))
-sns.kdeplot(data=df, x='message_length', hue='is_fraud', fill=True)
-plt.title("MLOps Check: Distribution of Message Length")
-plt.show()
+# # --- GRAPH 3: DATA DISTRIBUTION ---
+# # Do fraud messages have a different 'shape' than real ones?
+# plt.figure(figsize=(8, 5))
+# sns.kdeplot(data=df, x='message_length', hue='is_fraud', fill=True)
+# plt.title("MLOps Check: Distribution of Message Length")
+# plt.show()
+
+# # --- GRAPH 4: message_length vs is_fraud ---
+# plt.figure(figsize=(8, 5))
+# sns.boxplot(x='is_fraud', y='message_length', data=df, palette='Set3')
+# plt.title("MLOps Check: Message Length by Fraud Status")
+# plt.show()
+
+df.groupby("urgent_without_transaction")["is_fraud"].mean()
+df.groupby("has_pin_word")["is_fraud"].mean()
+
+print(df.groupby("urgent_without_transaction")["is_fraud"].mean())
+print(df.groupby("has_pin_word")["is_fraud"].mean())

@@ -3,6 +3,7 @@ import os
 import seaborn as sns
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
+from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
@@ -11,30 +12,58 @@ from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_sc
 from sklearn.metrics import confusion_matrix
 import seaborn as sns
 import matplotlib.pyplot as plt
+from scipy.sparse import hstack
+from imblearn.over_sampling import SMOTE
+from sklearn.model_selection import cross_val_score
+from imblearn.pipeline import Pipeline as ImbPipeline
 
-# 1. SETUP DATA (Assuming your features are ready)
+
+# 1. Load data
 df = pd.read_csv("data/processed/mpesa_sms_features.csv")
-features = ['message_length', 'has_link', 'has_pin_word', 'urgent_without_transaction', 'is_valid_sender']
+features = ['message_length', 'all_caps_count', 'exclamation_count', 'is_valid_sender',
+            'sender_id_mismatch', 'has_link', 'is_phishy_link', 'urgent_without_transaction',
+            'has_pin_word']  # Add your new ones like all_caps_ratio, etc.
 X = df[features]
 y = df['is_fraud']
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-# 2. RUN TOURNAMENT
+# Train/test split (on original data)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+
+# Scaler (only for numeric features)
+scaler = StandardScaler()
+
+# Models with SMOTE + scaling in pipeline
 models = {
-    "Logistic Regression": LogisticRegression(max_iter=1000, random_state=42),
-    "Decision Tree": DecisionTreeClassifier(random_state=42),
-    "Random Forest": RandomForestClassifier(n_estimators=100, random_state=42)
+    "Logistic Regression": ImbPipeline([
+        ('smote', SMOTE(random_state=42)),
+        ('scaler', scaler),
+        ('clf', LogisticRegression(max_iter=1000, random_state=42))
+    ]),
+    "Decision Tree": ImbPipeline([
+        ('smote', SMOTE(random_state=42)),
+        ('clf', DecisionTreeClassifier(max_depth=10, min_samples_leaf=5, random_state=42))
+    ]),
+    "Random Forest": ImbPipeline([
+        ('smote', SMOTE(random_state=42)),
+        ('clf', RandomForestClassifier(
+            n_estimators=200,
+            max_depth=15,
+            min_samples_leaf=5,
+            class_weight='balanced',
+            random_state=42
+        ))
+    ])
 }
 
+# Now training and evaluation
 results = []
-os.makedirs("models", exist_ok=True)
-for name, model in models.items():
-    model.fit(X_train, y_train)
-
-    y_probs = model.predict_proba(X_test)[:, 1]
-    threshold = 0.35
-    y_pred = (y_probs >= threshold).astype(int)
-
+for name, pipeline in models.items():
+    # Fit on training data (SMOTE only applied here)
+    pipeline.fit(X_train, y_train)
+    
+    y_pred = pipeline.predict(X_test)
+    y_probs = pipeline.predict_proba(X_test)[:, 1]
+    
     results.append({
         "Model": name,
         "Accuracy": accuracy_score(y_test, y_pred),
@@ -43,9 +72,16 @@ for name, model in models.items():
         "F1-Score": f1_score(y_test, y_pred)
     })
 
+    # Cross-validation (now safe!)
+    cv_scores = cross_val_score(pipeline, X_train, y_train, cv=5, scoring='f1')
+    print(f"{name} - 5-fold CV F1 on train: {cv_scores.mean():.3f} ± {cv_scores.std():.3f}")
 results_df = pd.DataFrame(results)
 print("\n--- FINAL LEADERBOARD ---")
 print(results_df)
+
+
+
+
 
 # 7. VISUALIZATION (Comparing the Models)
 sns.set_theme(style="whitegrid")
@@ -78,6 +114,10 @@ plt.figure(figsize=(10, 5))
 sns.barplot(data=feat_df, x='Importance', y='Feature', palette='magma')
 plt.title("Winning Model: Feature Importance Rankings")
 plt.savefig("feature_importance.png", bbox_inches='tight')
+
+
+
+
 
 from sklearn.metrics import confusion_matrix
 import seaborn as sns

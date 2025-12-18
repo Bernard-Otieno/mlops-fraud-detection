@@ -1,0 +1,4 @@
+M-PESA SMS Fraud Diagnostics Report
+Total samples: 10696
+Fraud rate: 34.6%
+Length AUC: 0.356

@@ -95,7 +95,7 @@ def extract_features(message_text, sender_id):
     # ---- Sender features ----
     
     sender_norm = str(sender_id).replace("-", "").upper()
-    features["is_valid_sender"] = int(sender_norm == "MPESA")
+    features["is_valid_sender"] = int(sender_norm == "MPESA" or sender_norm == "SAFARICOM")
     features["sender_is_numeric"] = int(sender_id.startswith("+254") or sender_id.isdigit())
     features["sender_length"] = len(sender_id)
         # Local Kenyan Pattern
@@ -119,15 +119,20 @@ def extract_features(message_text, sender_id):
     features["amount_count"] = len(amounts)
 
     # ---- Fraud language ----
-    features["has_pin_word"] = int(bool(re.search(r'\bpin\b', text_lower)))
+    features["has_pin_word"] = int("pin" in text_lower)
     has_urgent_word = int(any(word in text_lower for word in URGENT_WORDS))
-    features["urgent_without_transaction"] = int(has_urgent_word == 1 and features["has_confirmed"] == 0)
+    features["urgent_without_transaction"] = int(has_urgent_word and not is_confirmed_msg)
+    features["urgent_word_count"] = sum(text_lower.count(word) for word in URGENT_WORDS)
     features["has_spelling_error"] = int(any(err in text_lower for err in SPELLING_ERRORS))
     # 2. Panic Signals: Count exclamation marks
     features['exclamation_count'] = text.count('!')
     # 3. Urgency Screaming: Count words that are fully CAPITALIZED (excluding 'KSH')
     all_caps_words = re.findall(r'\b[A-Z]{3,}\b', text)
     features['all_caps_count'] = len([w for w in all_caps_words if w != 'KSH'])
+    words = text.split()
+    caps_words = [w for w in words if w.isupper() and len(w) > 2 and w != 'KSH']
+    features['all_caps_ratio'] = len(caps_words) / max(len(words), 1) if words else 0
+    features['fake_confirmation'] = int("confirmed" in text_lower and not features['is_valid_sender'])
 
     # ---- Link features ----
     links = find_links(text)

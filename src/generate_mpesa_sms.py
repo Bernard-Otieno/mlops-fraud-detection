@@ -157,24 +157,57 @@ def generate_legitimate_receipt_sms(msg_id):
     old_balance = round(random.uniform(100, 80000), 2)
     new_balance = round(old_balance + amount, 2)
     
-    # Promotions for receipts (less common, 30% chance)
+    # # Promotions for receipts (less common, 30% chance)
     promotions = [
         "Lipa na M-PESA at NAIVAS SUPERMARKET and stand a chance to win a trolley shopping.",
         "Get exclusive deals at https://bit.ly/mpesadeals for M-PESA users.",
         "Save more with M-PESA. Visit https://www.safaricom.co.ke/offers",
-        ""
+        "Enjoy up to 25% off when you pay with Lipa na M-PESA at selected outlets. Visit https://mpesa.co.ke/offers for details.",
+        "Pay with M-PESA today and stand a chance to win exciting rewards. Terms apply.",
+        "Use M-PESA for your daily payments and enjoy great deals from our partners.",  
     ]
     
-    if random.random() < 0.3:  # 30% have promotion
+    # LEGIT_PIN_MESSAGES = [
+    #     "Never share your M-PESA PIN with anyone.",
+    #     "Reminder: Do not disclose your PIN to anyone claiming to be Safaricom."
+    # ]
+    # LEGIT_URGENT_ALERTS = [
+    #     "URGENT: M-PESA service will be temporarily unavailable tonight.",
+    #     "IMPORTANT: Scheduled M-PESA maintenance tonight." 
+    #     "IMPORTANT: M-PESA services will be unavailable tonight from 12AM to 2AM due to system maintenance.",
+    #     "NOTICE: Safaricom is upgrading M-PESA systems. Some services may be temporarily unavailable.",
+    #     "ALERT: M-PESA service interruption expected during scheduled system maintenance.",
+    # ]
+
+    if random.random() < 0.10:  # 10% have promotion
         promotion = random.choice(promotions)
     else:
         promotion = ""
-    
-    sms = f"Confirmed. You have received Ksh{amount:.2f} from {sender_name} {sender_number} on {date_str} at {time_str} New M-PESA balance is Ksh{new_balance:.2f}."
+
+    # if random.random() < 0.02:  # 2% have PIN reminder
+    #     pin_reminder = random.choice(LEGIT_PIN_MESSAGES)
+    # else:
+    #     pin_reminder = ""
+
+    # if random.random() < 0.02:  # 2% have urgent alert
+    #     urgent_alert = random.choice(LEGIT_URGENT_ALERTS)
+    # else:
+    #     urgent_alert = ""
+
+    # Build legitimate receipt SMS    
+    sms = (
+    f"Confirmed. You have received Ksh{amount:.2f} from "
+    f"{sender_name} {sender_number} on {date_str} at {time_str}. "
+    f"New M-PESA balance is Ksh{new_balance:.2f}."
+    )
     
     if promotion:
         sms += f" {promotion}"
-    
+    # if pin_reminder:
+    #     sms += f" {pin_reminder}"
+    # if urgent_alert:
+    #     sms += f" {urgent_alert}"
+
     return {
         'message_id': f'MSG{msg_id:08d}',
         'sender_id': 'MPESA',
@@ -188,6 +221,46 @@ def generate_legitimate_receipt_sms(msg_id):
         'is_fraud': 0,
         'fraud_type': None,
         'message_type': 'receipt_confirmation'
+    }
+
+def generate_legitimate_system_alert(msg_id):
+    # Generate system alerts that ARE NOT transactions
+    LEGIT_PIN_MESSAGES = [
+        "Safaricom Alert: Never share your M-PESA PIN with anyone, including Safaricom staff.",
+        "Security Tip: Protect your account. Change your M-PESA PIN regularly and do not use easy sequences like 1234.",
+        "Reminder: Do not disclose your PIN or any OTP to anyone claiming to be from Safaricom or the police.",
+        "M-PESA Security: Safaricom will only call you through 0722 000 000. Do not share your PIN with anyone else."
+    ]
+    
+    LEGIT_URGENT_ALERTS = [
+        "URGENT: M-PESA service will be temporarily unavailable tonight from 12:00 AM to 2:00 AM due to maintenance.",
+        "IMPORTANT: Scheduled M-PESA maintenance tonight. Some services like airtime purchase may be affected.",
+        "NOTICE: Safaricom is upgrading M-PESA systems to serve you better. Expect intermittent service delays.",
+        "ALERT: M-PESA system maintenance is underway. We apologize for any inconvenience caused.",
+        "IMPORTANT: Your M-PESA App requires an update to stay secure. Visit the App Store or Play Store now."
+    ]
+
+    # Pick a category and then a message
+    if random.random() < 0.5:
+        sms = random.choice(LEGIT_PIN_MESSAGES)
+        msg_type = "security_reminder"
+    else:
+        sms = random.choice(LEGIT_URGENT_ALERTS)
+        msg_type = "system_maintenance"
+
+    timestamp = datetime.now() - timedelta(days=random.randint(0, 30))
+    
+    return {
+        'message_id': f'MSG{msg_id:08d}',
+        'sender_id': 'Safaricom',  # These officially come from Safaricom ID
+        'message_text': sms,
+        'timestamp': timestamp,
+        'amount': 0.0,
+        'transaction_cost': 0.0,
+        'new_balance': 0.0,
+        'is_fraud': 0,
+        'fraud_type': None,
+        'message_type': msg_type
     }
 
 def generate_fraud_sms(msg_id, fraud_type):
@@ -311,17 +384,31 @@ def generate_fraud_sms(msg_id, fraud_type):
         sender_id = 'MPESA'
         sms = "IMPORTANT: Due to updated Safaricom regulations, your M-PESA PIN will expire in 24 hours. To prevent account suspension, call our security desk on 0700000000 immediately."
 
-    else:  # grammar_errors
-        sender_id = 'MPESA'
-        recipient = generate_kenyan_name()
-        
-        bad_grammar = [
+    else: fraud_type == 'grammar_errors'
+    sender_id = 'MPESA'
+    recipient = generate_kenyan_name()
+    date_str = f"{timestamp.day}/{timestamp.month}/{timestamp.strftime('%y')}"
+    bad_grammar = [
             f"You has received Ksh{amount:.2f} from payment. Balance now Ksh{random.uniform(1000, 50000):.2f} is.",
             f"Confirmed money Ksh{amount:.2f} to {recipient} sent. New balance Ksh{random.uniform(1000, 50000):.2f}.",
             f"Transaction confirmed of Ksh{amount:.2f}. The balance for M-PESA is now Ksh{random.uniform(1000, 50000):.2f} after deduction."
         ]
-        sms = random.choice(bad_grammar)
-    
+    sms = random.choice(bad_grammar)
+   # Add realistic padding to ~75% of fraud messages to vary length
+    if random.random() < 0.75:
+       padding_options = [
+            " This is an automated message from Safaricom. Do not reply.",
+            " For more details, visit your nearest M-PESA agent or dial *334#.",
+            " Thank you for using M-PESA services. Safaricom - Transforming lives.",
+            " Note: Transaction fees may apply depending on amount. New promotions available!",
+            " Customer care: Call 100 (PrePay) or 200 (PostPay). Visit safaricom.co.ke for more.",
+            " This message is free. Stay safe and protect your PIN."
+        ]
+       extra = random.choice(padding_options)
+       if random.random() < 0.35:
+            extra += " " + random.choice(padding_options)
+       sms += extra
+
     return {
         'message_id': f'MSG{msg_id:08d}',
         'sender_id': sender_id,
@@ -344,10 +431,12 @@ def generate_dataset(n_samples=10000):
     messages = []
     
     # 80% legitimate (50% payment, 30% receipt)
-    n_legitimate = int(n_samples * 0.80)
-    n_payment = int(n_legitimate * 0.625)
-    n_receipt = n_legitimate - n_payment
-    
+    n_legitimate = int(n_samples * 0.70)
+    n_system_alerts = int(n_legitimate * 0.10)
+    n_legitimate -= n_system_alerts
+    n_payment = int(n_legitimate * 0.625)  # 62.5% of legitimate
+    n_receipt = n_legitimate - n_payment  # 37.5% of legitimate
+
     print(f"✅ Generating {n_payment:,} legitimate payment messages (with promotional links)...")
     for i in range(n_payment):
         messages.append(generate_legitimate_payment_sms(i))
@@ -359,6 +448,14 @@ def generate_dataset(n_samples=10000):
         messages.append(generate_legitimate_receipt_sms(i))
         if (i + 1 - n_payment) % 1000 == 0:
             print(f"   Progress: {i+1-n_payment:,}/{n_receipt:,}")
+
+    print(f"✅ Generating {n_system_alerts:,} legitimate system alert messages...")
+    for i in range(n_payment + n_receipt, n_payment + n_receipt + n_system_alerts):
+        messages.append(generate_legitimate_system_alert(i))
+        if (i + 1 - n_payment - n_receipt) % 1000 == 0:
+            print(f"   Progress: {i+1 - n_payment - n_receipt:,}/{n_system_alerts:,}")
+    
+    
     
     # 20% fraudulent
     n_fraud = n_samples - n_legitimate
