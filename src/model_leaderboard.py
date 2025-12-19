@@ -1,136 +1,126 @@
 import pandas as pd
-import os
-import seaborn as sns
-import matplotlib.pyplot as plt
-from sklearn.model_selection import train_test_split
-from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import StandardScaler
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.pipeline import Pipeline
 from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
-from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
-from sklearn.metrics import confusion_matrix
-import seaborn as sns
-import matplotlib.pyplot as plt
-from scipy.sparse import hstack
-from imblearn.over_sampling import SMOTE
-from sklearn.model_selection import cross_val_score
-from imblearn.pipeline import Pipeline as ImbPipeline
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import precision_score, recall_score, f1_score
 
-
-# 1. Load data
+FEATURES = [
+    'urgent_density',
+    'action_verb_count',
+    'transaction_completeness',
+    'all_caps_ratio',
+    'exclamation_ratio',
+    'authority_density',
+]
+HOLDOUT_FRAUD = 'smart_social'
 df = pd.read_csv("data/processed/mpesa_sms_features.csv")
-features = ['message_length', 'all_caps_count', 'exclamation_count', 'is_valid_sender',
-            'sender_id_mismatch', 'has_link', 'is_phishy_link', 'urgent_without_transaction',
-            'has_pin_word']  # Add your new ones like all_caps_ratio, etc.
-X = df[features]
-y = df['is_fraud']
 
-# Train/test split (on original data)
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+train_df = df[
+    (df['is_fraud'] == 0) |
+    ((df['is_fraud'] == 1) & (df['fraud_type'] != HOLDOUT_FRAUD))
+]
 
-# Scaler (only for numeric features)
-scaler = StandardScaler()
+test_df = df[
+    (df['is_fraud'] == 0) |
+    (df['fraud_type'] == HOLDOUT_FRAUD)
+]
 
-# Models with SMOTE + scaling in pipeline
+X_train = train_df[FEATURES + ['message_text']]
+y_train = train_df['is_fraud']
+
+X_test  = test_df[FEATURES + ['message_text']]
+y_test  = test_df['is_fraud']
+
+print("Test fraud count:")
+print(y_test.value_counts())
+
+preprocessor = ColumnTransformer(
+    transformers=[
+        ('num', StandardScaler(), FEATURES),
+        ('text', TfidfVectorizer(
+            max_features=300,
+            ngram_range=(1, 2),
+            stop_words='english'
+        ), 'message_text')
+    ]
+)
+
+
 models = {
-    "Logistic Regression": ImbPipeline([
-        ('smote', SMOTE(random_state=42)),
-        ('scaler', scaler),
-        ('clf', LogisticRegression(max_iter=1000, random_state=42))
-    ]),
-    "Decision Tree": ImbPipeline([
-        ('smote', SMOTE(random_state=42)),
-        ('clf', DecisionTreeClassifier(max_depth=10, min_samples_leaf=5, random_state=42))
-    ]),
-    "Random Forest": ImbPipeline([
-        ('smote', SMOTE(random_state=42)),
-        ('clf', RandomForestClassifier(
-            n_estimators=200,
-            max_depth=15,
-            min_samples_leaf=5,
-            class_weight='balanced',
-            random_state=42
-        ))
-    ])
+    "Logistic Regression": LogisticRegression(
+        max_iter=1000,
+        class_weight='balanced',
+        random_state=42
+    ),
+    "Decision Tree": DecisionTreeClassifier(
+        max_depth=8,
+        min_samples_leaf=10,
+        random_state=42
+    ),
+    "Random Forest": RandomForestClassifier(
+        n_estimators=200,
+        max_depth=12,
+        min_samples_leaf=10,
+        class_weight='balanced',
+        random_state=42
+    )
 }
-
-# Now training and evaluation
 results = []
-for name, pipeline in models.items():
-    # Fit on training data (SMOTE only applied here)
-    pipeline.fit(X_train, y_train)
+
+
+for name, model in models.items():
+    pipe = Pipeline([
+        ('prep', preprocessor),
+        ('clf', model)
+    ])
     
-    y_pred = pipeline.predict(X_test)
-    y_probs = pipeline.predict_proba(X_test)[:, 1]
+    pipe.fit(X_train, y_train)
+    y_pred = pipe.predict(X_test)
     
     results.append({
-        "Model": name,
-        "Accuracy": accuracy_score(y_test, y_pred),
-        "Precision": precision_score(y_test, y_pred),
-        "Recall": recall_score(y_test, y_pred),
-        "F1-Score": f1_score(y_test, y_pred)
+        'Model': name,
+        'Precision': precision_score(y_test, y_pred),
+        'Recall': recall_score(y_test, y_pred),
+        'F1': f1_score(y_test, y_pred)
     })
+print("Predictions distribution:")
+print(pd.Series(y_pred).value_counts())
+precision_score(y_test, y_pred, zero_division=0)
+recall_score(y_test, y_pred, zero_division=0)
+f1_score(y_test, y_pred, zero_division=0)
 
-    # Cross-validation (now safe!)
-    cv_scores = cross_val_score(pipeline, X_train, y_train, cv=5, scoring='f1')
-    print(f"{name} - 5-fold CV F1 on train: {cv_scores.mean():.3f} ± {cv_scores.std():.3f}")
-results_df = pd.DataFrame(results)
-print("\n--- FINAL LEADERBOARD ---")
-print(results_df)
+print(precision_score(y_test, y_pred, zero_division=0))
+print(recall_score(y_test, y_pred, zero_division=0))
+print(f1_score(y_test, y_pred, zero_division=0))
 
-
-
-
-
-# 7. VISUALIZATION (Comparing the Models)
-sns.set_theme(style="whitegrid")
-results_melted = results_df.melt(id_vars="Model", var_name="Metric", value_name="Score")
-
-plt.figure(figsize=(12, 7))
-plot = sns.barplot(data=results_melted, x="Metric", y="Score", hue="Model", palette="magma")
-plt.title("MLOps Performance Tournament: Model Comparison", fontsize=16)
-plt.ylim(0, 1.1)
-plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-
-# Add score labels on top of bars
-for p in plot.patches:
-    plot.annotate(format(p.get_height(), '.2f'), 
-                   (p.get_x() + p.get_width() / 2., p.get_height()), 
-                   ha = 'center', va = 'center', 
-                   xytext = (0, 9), 
-                   textcoords = 'offset points',
-                   fontsize=8)
-
-plt.tight_layout()
-plt.savefig("model_comparison_plot.png")
-print("\n📊 Success! Plot saved as 'model_comparison_plot.png'")
-# 4. PLOT 2: FEATURE IMPORTANCE (From the Random Forest)
-rf_model = models["Random Forest"]
-importances = rf_model.feature_importances_
-feat_df = pd.DataFrame({'Feature': features, 'Importance': importances}).sort_values(by='Importance', ascending=False)
-
-plt.figure(figsize=(10, 5))
-sns.barplot(data=feat_df, x='Importance', y='Feature', palette='magma')
-plt.title("Winning Model: Feature Importance Rankings")
-plt.savefig("feature_importance.png", bbox_inches='tight')
+# leaderboard = pd.DataFrame(results).sort_values('F1', ascending=False)
+# print("\n📊 MODEL LEADERBOARD (Generalization Test)")
+# print(leaderboard)
 
 
+# best_pipe = pipe  # Logistic Regression
+# test_df = df[
+#     (df['is_fraud'] == 0) |
+#     (df['fraud_type'] == HOLDOUT_FRAUD)
+# ].copy()
 
+# test_df['pred'] = best_pipe.predict(X_test)
 
+# false_positives = test_df[
+#     (test_df['pred'] == 1) & (test_df['is_fraud'] == 0)
+# ]
+# false_negatives = test_df[
+#     (test_df['pred'] == 0) & (test_df['is_fraud'] == 1)
+# ]
+# if len(false_negatives) == 0:
+#     print("✅ No false negatives found (recall = 1.0)")
+# else:
+#     false_negatives[['message_text']].sample(
+#         min(5, len(false_negatives)), random_state=42
+#     )
 
-from sklearn.metrics import confusion_matrix
-import seaborn as sns
-import matplotlib.pyplot as plt
-
-# Generate the confusion matrix
-cm = confusion_matrix(y_test, y_pred)
-
-plt.figure(figsize=(8, 6))
-sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
-            xticklabels=['Predicted Legit', 'Predicted Fraud'],
-            yticklabels=['Actual Legit', 'Actual Fraud'])
-plt.ylabel('Actual')
-plt.xlabel('Predicted')
-plt.title('Where is the model failing?')
-plt.savefig("confusion_matrix.png")
+#     false_negatives[['message_text']].sample(5, random_state=42)
