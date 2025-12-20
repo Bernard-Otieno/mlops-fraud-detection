@@ -1,6 +1,6 @@
 """
-IMPROVED M-PESA Transaction Data Generator
-Now includes realistic promotional links in legitimate messages
+PRODUCTION-GRADE M-PESA SMS Data Generator
+Includes realistic fraud campaigns with sender pools, burst timing, and amount reuse
 """
 
 import pandas as pd
@@ -13,7 +13,89 @@ fake = Faker()
 np.random.seed(42)
 random.seed(42)
 
-# M-PESA transaction cost structure
+# ============================================================================
+# FRAUD CAMPAIGN INFRASTRUCTURE
+# ============================================================================
+
+# Sender ID pools - fraud campaigns reuse small sets of numbers
+FRAUD_SENDER_POOLS = {
+    "smart_social": [],
+    "smart_phish": [],
+    "smart_reversal": [],
+    "pin_request": [],
+    "phishing_link": [],
+    "reversal_scam": []
+}
+
+# Campaign timing - fraud comes in bursts
+FRAUD_CAMPAIGN_TIME = {}
+
+# Amount templates - scams reuse specific amounts
+FRAUD_AMOUNTS = {
+    "smart_social": [4999, 9999, 14999, 19999],
+    "smart_phish": [2999, 7999, 12999],
+    "smart_reversal": [5000, 10000, 15000],
+    "pin_request": [1000, 5000, 10000],
+    "phishing_link": [3000, 8000, 15000],
+    "reversal_scam": [7500, 12500, 20000]
+}
+
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+
+def generate_fraud_sender():
+    """Generate a new fraud sender number"""
+    return "+2547" + "".join(str(random.randint(0, 9)) for _ in range(8))
+
+def get_fraud_sender(fraud_type):
+    """
+    Get sender ID for fraud - 70% reuse within campaign, 30% new
+    This creates realistic fraud patterns where same numbers are used repeatedly
+    """
+    pool = FRAUD_SENDER_POOLS.get(fraud_type, [])
+    
+    # 70% chance to reuse existing sender from this campaign
+    if pool and random.random() < 0.7:
+        sender_id = random.choice(pool)
+    else:
+        # 30% chance to introduce new sender
+        sender_id = generate_fraud_sender()
+        pool.append(sender_id)
+        # Keep pool size reasonable (max 5 senders per campaign)
+        if len(pool) > 5:
+            pool.pop(0)
+    
+    return sender_id
+
+def get_fraud_timestamp(fraud_type, base_time):
+    """
+    Generate timestamp for fraud with burst behavior
+    Fraud comes in campaigns with messages clustered in time
+    """
+    # 20% chance to start a new campaign burst
+    if fraud_type not in FRAUD_CAMPAIGN_TIME or random.random() < 0.2:
+        FRAUD_CAMPAIGN_TIME[fraud_type] = base_time
+    
+    # Advance time by 1-5 minutes (burst behavior)
+    delta = timedelta(minutes=random.randint(1, 5))
+    FRAUD_CAMPAIGN_TIME[fraud_type] += delta
+    return FRAUD_CAMPAIGN_TIME[fraud_type]
+
+def get_fraud_amount(fraud_type):
+    """
+    Generate fraud amount with campaign signature
+    Scams reuse specific amounts with small variations
+    """
+    if fraud_type in FRAUD_AMOUNTS:
+        base = random.choice(FRAUD_AMOUNTS[fraud_type])
+        # Add small noise to make it less obvious
+        noise = random.randint(-50, 50)
+        return round(base + noise, 2)
+    else:
+        # Fallback for other fraud types
+        return round(random.uniform(1000, 100000), 2)
+
 def get_transaction_cost(amount):
     """Calculate M-PESA transaction cost based on amount"""
     if amount <= 100:
@@ -62,23 +144,21 @@ def generate_kenyan_name():
     
     return f"{random.choice(first_names)} {random.choice(last_names)}"
 
-def generate_random_timestamp():
-    """Generate a random timestamp within the last 90 days"""
-    days_ago = random.randint(0, 90)
-    hours = random.randint(6, 22)
-    minutes = random.randint(0, 59)
-    return datetime.now() - timedelta(days=days_ago, hours=hours, minutes=minutes)
+def generate_phone_number():
+    """Generate Kenyan phone number"""
+    prefixes = ['0710', '0720', '0730', '0740', '0750', '0768', '0769', '0791', '0792', '0793']
+    number = random.choice(prefixes) + ''.join([str(random.randint(0, 9)) for _ in range(6)])
+    return f"{number[:4]} {number[4:7]} {number[7:]}"
 
 def format_mpesa_datetime(timestamp):
     """Format datetime in M-PESA format"""
     date_str = f"{timestamp.day}/{timestamp.month}/{timestamp.strftime('%y')}"
     time_str = timestamp.strftime("%I.%M %p").lstrip("0")
     return date_str, time_str
-def generate_phone_number():
-    """Generate Kenyan phone number"""
-    prefixes = ['0710', '0720', '0730', '0740', '0750', '0768', '0769', '0791', '0792', '0793']
-    number = random.choice(prefixes) + ''.join([str(random.randint(0, 9)) for _ in range(6)])
-    return f"{number[:4]} {number[4:7]} {number[7:]}"
+
+# ============================================================================
+# LEGITIMATE MESSAGE GENERATORS
+# ============================================================================
 
 def generate_legitimate_payment_sms(msg_id):
     """Generate legitimate payment SMS with realistic promotions"""
@@ -86,14 +166,13 @@ def generate_legitimate_payment_sms(msg_id):
     amount = round(random.uniform(50, 50000), 2)
     recipient = generate_kenyan_name()
     
-    # Generate timestamp
+    # Legitimate messages have evenly distributed timestamps
     days_ago = random.randint(0, 90)
     hours = random.randint(6, 22)
     minutes = random.randint(0, 59)
     timestamp = datetime.now() - timedelta(days=days_ago, hours=hours, minutes=minutes)
     
-    date_str = f"{timestamp.day}/{timestamp.month}/{timestamp.strftime('%y')}"
-    time_str = timestamp.strftime("%I.%M %p").lstrip("0")
+    date_str, time_str = format_mpesa_datetime(timestamp)
     
     # Calculate transaction cost
     cost = get_transaction_cost(amount)
@@ -105,7 +184,7 @@ def generate_legitimate_payment_sms(msg_id):
     # Daily limit
     daily_limit = 500000.00
     
-    # UPDATED: Realistic promotions with links (60% have promotions, 40% of those have links)
+    # Realistic promotions with links (60% have promotions, 40% of those have links)
     promotions_with_links = [
         "Pata zawadi za hadi sh 300 unapotumia M-PESA Global. Visit https://bit.ly/mpesalnk",
         "Lipa na M-PESA online na upate up to 25% off. Details at https://bit.ly/mpesaglobal",
@@ -123,8 +202,8 @@ def generate_legitimate_payment_sms(msg_id):
     ]
     
     # 60% chance of promotion, 40% of promotions have links
-    if random.random() < 0.6:  # 60% have promotion
-        if random.random() < 0.4:  # 40% of promotions have links
+    if random.random() < 0.6:
+        if random.random() < 0.4:
             promotion = random.choice(promotions_with_links)
         else:
             promotion = random.choice(promotions_no_links)
@@ -158,68 +237,37 @@ def generate_legitimate_receipt_sms(msg_id):
     sender_name = generate_kenyan_name()
     sender_number = generate_phone_number()
     
+    # Evenly distributed timestamps for legit messages
     days_ago = random.randint(0, 90)
     hours = random.randint(6, 22)
     minutes = random.randint(0, 59)
     timestamp = datetime.now() - timedelta(days=days_ago, hours=hours, minutes=minutes)
     
-    date_str = f"{timestamp.day}/{timestamp.month}/{timestamp.strftime('%y')}"
-    time_str = timestamp.strftime("%I.%M %p").lstrip("0")
+    date_str, time_str = format_mpesa_datetime(timestamp)
     
     old_balance = round(random.uniform(100, 80000), 2)
     new_balance = round(old_balance + amount, 2)
     
-    # # Promotions for receipts (less common, 30% chance)
+    # Promotions for receipts (less common, 30% chance)
     promotions = [
         "Lipa na M-PESA at NAIVAS SUPERMARKET and stand a chance to win a trolley shopping.",
         "Get exclusive deals at https://bit.ly/mpesadeals for M-PESA users.",
         "Save more with M-PESA. Visit https://www.safaricom.co.ke/offers",
-        "Enjoy up to 25% off when you pay with Lipa na M-PESA at selected outlets. Visit https://mpesa.co.ke/offers for details.",
-        "Pay with M-PESA today and stand a chance to win exciting rewards. Terms apply.",
-        "Use M-PESA for your daily payments and enjoy great deals from our partners.",  
+        "Enjoy up to 25% off when you pay with Lipa na M-PESA at selected outlets.",
+        "Pay with M-PESA today and stand a chance to win exciting rewards.",
+        ""
     ]
     
-    # LEGIT_PIN_MESSAGES = [
-    #     "Never share your M-PESA PIN with anyone.",
-    #     "Reminder: Do not disclose your PIN to anyone claiming to be Safaricom."
-    # ]
-    # LEGIT_URGENT_ALERTS = [
-    #     "URGENT: M-PESA service will be temporarily unavailable tonight.",
-    #     "IMPORTANT: Scheduled M-PESA maintenance tonight." 
-    #     "IMPORTANT: M-PESA services will be unavailable tonight from 12AM to 2AM due to system maintenance.",
-    #     "NOTICE: Safaricom is upgrading M-PESA systems. Some services may be temporarily unavailable.",
-    #     "ALERT: M-PESA service interruption expected during scheduled system maintenance.",
-    # ]
-
-    if random.random() < 0.10:  # 10% have promotion
+    if random.random() < 0.30:
         promotion = random.choice(promotions)
     else:
         promotion = ""
-
-    # if random.random() < 0.02:  # 2% have PIN reminder
-    #     pin_reminder = random.choice(LEGIT_PIN_MESSAGES)
-    # else:
-    #     pin_reminder = ""
-
-    # if random.random() < 0.02:  # 2% have urgent alert
-    #     urgent_alert = random.choice(LEGIT_URGENT_ALERTS)
-    # else:
-    #     urgent_alert = ""
-
-    # Build legitimate receipt SMS    
-    sms = (
-    f"Confirmed. You have received Ksh{amount:.2f} from "
-    f"{sender_name} {sender_number} on {date_str} at {time_str}. "
-    f"New M-PESA balance is Ksh{new_balance:.2f}."
-    )
+    
+    sms = f"Confirmed. You have received Ksh{amount:.2f} from {sender_name} {sender_number} on {date_str} at {time_str} New M-PESA balance is Ksh{new_balance:.2f}."
     
     if promotion:
         sms += f" {promotion}"
-    # if pin_reminder:
-    #     sms += f" {pin_reminder}"
-    # if urgent_alert:
-    #     sms += f" {urgent_alert}"
-
+    
     return {
         'message_id': f'MSG{msg_id:08d}',
         'sender_id': 'MPESA',
@@ -236,43 +284,35 @@ def generate_legitimate_receipt_sms(msg_id):
     }
 
 def generate_legitimate_system_alert(msg_id):
-    # Generate system alerts that ARE NOT transactions
+    """Generate legitimate system alerts (PIN reminders, maintenance notices)"""
+    
     LEGIT_PIN_MESSAGES = [
         "Safaricom Alert: Never share your M-PESA PIN with anyone, including Safaricom staff.",
-        "Security Tip: Protect your account. Change your M-PESA PIN regularly and do not use easy sequences like 1234.",
-        "Reminder: Do not disclose your PIN or any OTP to anyone claiming to be from Safaricom or the police.",
-        "M-PESA Security: Safaricom will only call you through 0722 000 000. Do not share your PIN with anyone else.",
-        "Safaricom Reminder: Never share your M-PESA PIN with anyone.",
-        "Security Alert: Protect your PIN to avoid fraud."
+        "Security Tip: Protect your account. Change your M-PESA PIN regularly.",
+        "Reminder: Do not disclose your PIN to anyone claiming to be from Safaricom.",
+        "M-PESA Security: Safaricom will only call you through 0722 000 000.",
     ]
     
     LEGIT_URGENT_ALERTS = [
         "URGENT: M-PESA service will be temporarily unavailable tonight from 12:00 AM to 2:00 AM due to maintenance.",
-        "IMPORTANT: Scheduled M-PESA maintenance tonight. Some services like airtime purchase may be affected.",
-        "NOTICE: Safaricom is upgrading M-PESA systems to serve you better. Expect intermittent service delays.",
-        "ALERT: M-PESA system maintenance is underway. We apologize for any inconvenience caused.",
-        "IMPORTANT: Your M-PESA App requires an update to stay secure. Visit the App Store or Play Store now."
+        "IMPORTANT: Scheduled M-PESA maintenance tonight. Some services may be affected.",
+        "NOTICE: Safaricom is upgrading M-PESA systems to serve you better.",
+        "ALERT: M-PESA system maintenance is underway. We apologize for any inconvenience.",
     ]
-
-    # Pick a category and then a message
+    
+    # Pick category
     if random.random() < 0.5:
         sms = random.choice(LEGIT_PIN_MESSAGES)
         msg_type = "security_reminder"
     else:
         sms = random.choice(LEGIT_URGENT_ALERTS)
         msg_type = "system_maintenance"
-    if random.random() >= 0.15:
-        sms = random.choice(LEGIT_URGENT_ALERTS)
-        msg_type = "system_maintenance"
-    else:
-        sms = random.choice(LEGIT_PIN_MESSAGES)
-        msg_type = "security_reminder"
-
+    
     timestamp = datetime.now() - timedelta(days=random.randint(0, 30))
     
     return {
         'message_id': f'MSG{msg_id:08d}',
-        'sender_id': 'Safaricom',  # These officially come from Safaricom ID
+        'sender_id': 'Safaricom',
         'message_text': sms,
         'timestamp': timestamp,
         'amount': 0.0,
@@ -283,22 +323,28 @@ def generate_legitimate_system_alert(msg_id):
         'message_type': msg_type
     }
 
-def generate_smart_social_fraud_sms(msg_id):
-    """
-    High-fidelity social engineering fraud.
-    Looks like a real M-PESA receipt but nudges user to act.
-    """
-    timestamp = generate_random_timestamp()
-    date_str, time_str = format_mpesa_datetime(timestamp)
+# ============================================================================
+# FRAUD MESSAGE GENERATORS
+# ============================================================================
 
+def generate_smart_social_fraud_sms(msg_id, base_time):
+    """
+    High-fidelity social engineering fraud
+    Uses campaign sender pool and burst timing
+    """
+    # Use campaign infrastructure
+    sender_id = get_fraud_sender('smart_social')
+    timestamp = get_fraud_timestamp('smart_social', base_time)
+    amount = get_fraud_amount('smart_social')
+    
+    date_str, time_str = format_mpesa_datetime(timestamp)
+    
     sender_name = generate_kenyan_name()
     sender_number = generate_phone_number()
-
-    amount = round(random.uniform(1000, 50000), 2)
+    
     transaction_cost = round(random.choice([0, 35, 55]), 2)
-
     new_balance = round(random.uniform(10000, 200000), 2)
-
+    
     # Core legit-looking receipt
     sms = (
         f"Confirmed. You have received Ksh{amount:.2f} from "
@@ -306,48 +352,50 @@ def generate_smart_social_fraud_sms(msg_id):
         f"Transaction cost, Ksh{transaction_cost:.2f}. "
         f"New M-PESA balance is Ksh{new_balance:.2f}."
     )
-
-    # Soft social engineering nudge (NO urgency, NO commands)
+    
+    # Soft social engineering nudge
     followups = [
         " If this transaction was not expected, kindly review your M-PESA activity.",
         " For your security, please ensure your M-PESA details are up to date.",
         " If you do not recognize this transaction, please contact Safaricom support.",
         " Kindly verify this transaction in your M-PESA menu for confirmation."
     ]
-
-    if random.random() < 0.7:  # not always present
+    
+    if random.random() < 0.7:
         sms += random.choice(followups)
-
+    
     return {
         'message_id': f'MSG{msg_id:08d}',
-        'sender_id': 'MPESA',
+        'sender_id': sender_id,
         'message_text': sms,
         'timestamp': timestamp,
         'amount': amount,
         'transaction_cost': transaction_cost,
         'new_balance': new_balance,
-        'recipient_name': sender_name,
-        'sender_name': None,
-        'sender_number': None,
         'is_fraud': 1,
         'fraud_type': 'smart_social',
-        'message_type': 'receipt_like_social'
+        'message_type': 'fraudulent'
     }
 
-
-def generate_fraud_sms(msg_id, fraud_type):
-    """Generate various types of fraudulent SMS"""
+def generate_fraud_sms(msg_id, fraud_type, base_time):
+    """Generate various types of fraudulent SMS with campaign behavior"""
     
-    amount = round(random.uniform(1000, 100000), 2)
-    timestamp = datetime.now() - timedelta(days=random.randint(0, 30))
-    
-    if fraud_type == 'fake_sender_id':
+    # Use campaign infrastructure for applicable fraud types
+    if fraud_type in FRAUD_SENDER_POOLS:
+        sender_id = get_fraud_sender(fraud_type)
+        timestamp = get_fraud_timestamp(fraud_type, base_time)
+        amount = get_fraud_amount(fraud_type)
+    else:
+        # Fallback for other fraud types
         fake_sender_ids = ['M-PESA', 'MPESA-KE', '+254700000000', 'SAFMPESA', '20060']
         sender_id = random.choice(fake_sender_ids)
-        
+        timestamp = base_time
+        amount = round(random.uniform(1000, 100000), 2)
+    
+    date_str, time_str = format_mpesa_datetime(timestamp)
+    
+    if fraud_type == 'fake_sender_id':
         recipient = generate_kenyan_name()
-        date_str = f"{timestamp.day}/{timestamp.month}/{timestamp.strftime('%y')}"
-        time_str = timestamp.strftime("%I.%M %p").lstrip("0")
         cost = get_transaction_cost(amount)
         new_balance = round(random.uniform(1000, 50000), 2)
         
@@ -356,8 +404,6 @@ def generate_fraud_sms(msg_id, fraud_type):
     elif fraud_type == 'spelling_errors':
         sender_id = 'MPESA'
         recipient = generate_kenyan_name()
-        date_str = f"{timestamp.day}/{timestamp.month}/{timestamp.strftime('%y')}"
-        time_str = timestamp.strftime("%I.%M %p").lstrip("0")
         cost = get_transaction_cost(amount)
         new_balance = round(random.uniform(1000, 50000), 2)
         
@@ -369,18 +415,13 @@ def generate_fraud_sms(msg_id, fraud_type):
         sms = random.choice(errors)
     
     elif fraud_type == 'reversal_scam':
-        sender_id = random.choice(['MPESA', 'M-PESA', '+254700000000'])
         sender_name = generate_kenyan_name()
         sender_number = generate_phone_number()
-        date_str = f"{timestamp.day}/{timestamp.month}/{timestamp.strftime('%y')}"
-        time_str = timestamp.strftime("%I.%M %p").lstrip("0")
         new_balance = round(random.uniform(amount + 1000, 100000), 2)
         
         sms = f"Confirmed. You have received Ksh{amount:.2f} from {sender_name} {sender_number} on {date_str} at {time_str} New M-PESA balance is Ksh{new_balance:.2f}. URGENT: This was sent by mistake. Please reverse immediately or call {sender_number}."
     
     elif fraud_type == 'pin_request':
-        sender_id = random.choice(['MPESA', 'M-PESA', 'SAFARICOM', '+254700000000'])
-        
         messages = [
             f"MPESA ALERT: Your account will be suspended. To verify, reply with your PIN and ID number. Reference: {random.randint(100000, 999999)}",
             f"M-PESA Security: Suspicious activity detected. Confirm your identity by sending PIN to this number within 24 hours.",
@@ -389,99 +430,45 @@ def generate_fraud_sms(msg_id, fraud_type):
         sms = random.choice(messages)
     
     elif fraud_type == 'phishing_link':
-        sender_id = random.choice(['MPESA', 'M-PESA', 'SAFMPESA', '+254700000000'])
-        
-        # UPDATED: More realistic phishing links
         fake_links = [
             'https://bit.ly/mpesa-verify123',
             'https://bit.ly/urgent-mpesa',
             'https://tinyurl.com/mpesa-unlock',
             'http://mpesa-verify.com/account',
             'https://bit.ly/M-PESA-security',
-            'https://bit.ly/mpesa-suspended',
-            'http://safaricom-verify.co.ke/mpesa',
         ]
         link = random.choice(fake_links)
         
         messages = [
             f"MPESA ALERT: Your account will be suspended. Verify immediately at {link}",
             f"URGENT: Suspicious activity detected on your M-PESA. Confirm here: {link}",
-            f"M-PESA Security: Click {link} to verify your account within 24 hours or lose access.",
+            f"M-PESA Security: Click {link} to verify your account within 24 hours.",
             f"Your M-PESA daily limit has been exceeded. Reset here: {link}",
-            f"CONGRATULATIONS! You won Ksh{amount:.2f} in M-PESA promotion. Claim at {link}",
-            f"Your account has been locked due to suspicious activity. Unlock at {link}",
         ]
         sms = random.choice(messages)
     
-    elif fraud_type == 'wrong_calculation':
+    elif fraud_type == 'smart_social':
+        return generate_smart_social_fraud_sms(msg_id, base_time)
+    
+    else:  # grammar_errors, wrong_calculation, unrealistic_amount, etc.
         sender_id = 'MPESA'
         recipient = generate_kenyan_name()
-        date_str = f"{timestamp.day}/{timestamp.month}/{timestamp.strftime('%y')}"
-        time_str = timestamp.strftime("%I.%M %p").lstrip("0")
-        cost = get_transaction_cost(amount)
         
-        old_balance = round(random.uniform(1000, 50000), 2)
-        wrong_new_balance = round(old_balance + random.uniform(-5000, 5000), 2)
-        
-        sms = f"Confirmed. Ksh{amount:.2f} paid to {recipient}. on {date_str} at {time_str} New M-PESA balance is Ksh{wrong_new_balance:.2f}. Transaction cost, Ksh{cost:.2f}."
-    
-    elif fraud_type == 'unrealistic_amount':
-        sender_id = random.choice(['MPESA', 'M-PESA'])
-        sender_name = generate_kenyan_name()
-        sender_number = generate_phone_number()
-        
-        huge_amount = round(random.uniform(500000, 10000000), 2)
-        date_str = f"{timestamp.day}/{timestamp.month}/{timestamp.strftime('%y')}"
-        time_str = timestamp.strftime("%I.%M %p").lstrip("0")
-        new_balance = round(random.uniform(1000000, 15000000), 2)
-        
-        sms = f"Confirmed. You have received Ksh{huge_amount:.2f} from {sender_name} {sender_number} on {date_str} at {time_str} New M-PESA balance is Ksh{new_balance:.2f}."
-    elif fraud_type == 'smart_reversal':
-        # Perfectly formatted receipt from the 'Official' sender
-        sender_id = 'MPESA'
-        sender_name = generate_kenyan_name()
-        sender_number = generate_phone_number()
-        date_str = f"{timestamp.day}/{timestamp.month}/{timestamp.strftime('%y')}"
-        time_str = timestamp.strftime("%I.%M %p").lstrip("0")
-        sms = f"Confirmed. You have received Ksh{amount:.2f} from {sender_name} {sender_number} on {date_str} at {time_str} New M-PESA balance is Ksh{random.uniform(5000, 20000):.2f}."
-
-    elif fraud_type == 'smart_phish':
-        # Uses a URL that looks like the real Safaricom domain
-        sender_id = 'MPESA'
-        fake_domain = random.choice(["safaricom-portal.co.ke", "mpesa-security-update.com", "safaricom-care.net"])
-        sms = f"M-PESA Alert: Suspicious activity detected on your account. To secure your funds, please verify your identity at https://{fake_domain}/verify."
-
-    elif fraud_type == 'smart_social':
-        # High-pressure social engineering with no links or errors
-        sender_id = 'MPESA'
-        record = generate_smart_social_fraud_sms(msg_id)
-        return record
-        
-    else: fraud_type == 'grammar_errors'
-    sender_id = 'MPESA'
-    recipient = generate_kenyan_name()
-    date_str = f"{timestamp.day}/{timestamp.month}/{timestamp.strftime('%y')}"
-    bad_grammar = [
+        bad_grammar = [
             f"You has received Ksh{amount:.2f} from payment. Balance now Ksh{random.uniform(1000, 50000):.2f} is.",
             f"Confirmed money Ksh{amount:.2f} to {recipient} sent. New balance Ksh{random.uniform(1000, 50000):.2f}.",
-            f"Transaction confirmed of Ksh{amount:.2f}. The balance for M-PESA is now Ksh{random.uniform(1000, 50000):.2f} after deduction."
         ]
-    sms = random.choice(bad_grammar)
-   # Add realistic padding to ~75% of fraud messages to vary length
+        sms = random.choice(bad_grammar)
+    
+    # Add realistic padding to 75% of fraud messages
     if random.random() < 0.75:
-       padding_options = [
-            " This is an automated message from Safaricom. Do not reply.",
-            " For more details, visit your nearest M-PESA agent or dial *334#.",
-            " Thank you for using M-PESA services. Safaricom - Transforming lives.",
-            " Note: Transaction fees may apply depending on amount. New promotions available!",
-            " Customer care: Call 100 (PrePay) or 200 (PostPay). Visit safaricom.co.ke for more.",
-            " This message is free. Stay safe and protect your PIN."
+        padding_options = [
+            " This is an automated message from Safaricom.",
+            " For more details, visit your nearest M-PESA agent.",
+            " Thank you for using M-PESA services.",
         ]
-       extra = random.choice(padding_options)
-       if random.random() < 0.35:
-            extra += " " + random.choice(padding_options)
-       sms += extra
-
+        sms += random.choice(padding_options)
+    
     return {
         'message_id': f'MSG{msg_id:08d}',
         'sender_id': sender_id,
@@ -495,25 +482,26 @@ def generate_fraud_sms(msg_id, fraud_type):
         'message_type': 'fraudulent'
     }
 
-
-
+# ============================================================================
+# DATASET GENERATION
+# ============================================================================
 
 def generate_dataset(n_samples=10000):
-    """Generate complete SMS dataset"""
+    """Generate complete SMS dataset with realistic fraud campaigns"""
     
-    print("🚀 Generating IMPROVED M-PESA SMS Dataset...")
+    print("🚀 Generating PRODUCTION-GRADE M-PESA SMS Dataset...")
     print(f"📊 Target samples: {n_samples:,}\n")
     
     messages = []
     
-    # 80% legitimate (50% payment, 30% receipt)
+    # 70% legitimate (split between payments, receipts, system alerts)
     n_legitimate = int(n_samples * 0.70)
     n_system_alerts = int(n_legitimate * 0.10)
-    n_legitimate -= n_system_alerts
-    n_payment = int(n_legitimate * 0.625)  # 62.5% of legitimate
-    n_receipt = n_legitimate - n_payment  # 37.5% of legitimate
-
-    print(f"✅ Generating {n_payment:,} legitimate payment messages (with promotional links)...")
+    n_legitimate_transactions = n_legitimate - n_system_alerts
+    n_payment = int(n_legitimate_transactions * 0.625)
+    n_receipt = n_legitimate_transactions - n_payment
+    
+    print(f"✅ Generating {n_payment:,} legitimate payment messages...")
     for i in range(n_payment):
         messages.append(generate_legitimate_payment_sms(i))
         if (i + 1) % 1000 == 0:
@@ -522,18 +510,12 @@ def generate_dataset(n_samples=10000):
     print(f"✅ Generating {n_receipt:,} legitimate receipt messages...")
     for i in range(n_payment, n_payment + n_receipt):
         messages.append(generate_legitimate_receipt_sms(i))
-        if (i + 1 - n_payment) % 1000 == 0:
-            print(f"   Progress: {i+1-n_payment:,}/{n_receipt:,}")
-
-    print(f"✅ Generating {n_system_alerts:,} legitimate system alert messages...")
+    
+    print(f"✅ Generating {n_system_alerts:,} legitimate system alerts...")
     for i in range(n_payment + n_receipt, n_payment + n_receipt + n_system_alerts):
         messages.append(generate_legitimate_system_alert(i))
-        if (i + 1 - n_payment - n_receipt) % 1000 == 0:
-            print(f"   Progress: {i+1 - n_payment - n_receipt:,}/{n_system_alerts:,}")
     
-    
-    
-    # 20% fraudulent
+    # 30% fraudulent with campaign behavior
     n_fraud = n_samples - n_legitimate
     fraud_types = [
         'fake_sender_id',
@@ -541,35 +523,33 @@ def generate_dataset(n_samples=10000):
         'reversal_scam',
         'pin_request',
         'phishing_link',
-        'wrong_calculation',
-        'unrealistic_amount',
-        'grammar_errors',
-        'smart_reversal',
-        'smart_phish',
-        'smart_social'
+        'smart_social',
+        'grammar_errors'
     ]
     
-    print(f"🚨 Generating {n_fraud:,} fraudulent messages (with phishing links)...")
+    print(f"🚨 Generating {n_fraud:,} fraudulent messages with campaign behavior...")
     fraud_per_type = n_fraud // len(fraud_types)
     
-    msg_id = n_payment + n_receipt
+    msg_id = n_payment + n_receipt + n_system_alerts
+    base_time = datetime.now() - timedelta(days=90)
+    
     for fraud_type in fraud_types:
         for _ in range(fraud_per_type):
-            messages.append(generate_fraud_sms(msg_id, fraud_type))
+            messages.append(generate_fraud_sms(msg_id, fraud_type, base_time))
             msg_id += 1
     
     # Add remaining
     while len(messages) < n_samples:
         fraud_type = random.choice(fraud_types)
-        messages.append(generate_fraud_sms(msg_id, fraud_type))
+        messages.append(generate_fraud_sms(msg_id, fraud_type, base_time))
         msg_id += 1
     
     df = pd.DataFrame(messages)
     df = df.sort_values('timestamp').reset_index(drop=True)
-    # After generating dataset
+    
+    # Add 2% label noise to simulate real-world ambiguity
     noise_idx = df.sample(frac=0.02, random_state=42).index
     df.loc[noise_idx, 'is_fraud'] = 1 - df.loc[noise_idx, 'is_fraud']
-
     
     return df
 
@@ -596,12 +576,19 @@ def main():
     print(f"\n📤 Sender ID Distribution:")
     print(df['sender_id'].value_counts().head(10).to_string())
     
-    # Check links in legitimate vs fraud
+    # Check campaign behavior
     print(f"\n🔗 LINK ANALYSIS:")
     legit_with_links = df[(df['is_fraud']==0) & (df['message_text'].str.contains('http|www', case=False))].shape[0]
     fraud_with_links = df[(df['is_fraud']==1) & (df['message_text'].str.contains('http|www', case=False))].shape[0]
     print(f"   Legitimate messages with links: {legit_with_links:,}")
     print(f"   Fraudulent messages with links: {fraud_with_links:,}")
+    
+    # Check fraud sender reuse
+    print(f"\n📞 FRAUD SENDER ANALYSIS:")
+    fraud_senders = df[df['is_fraud']==1]['sender_id'].value_counts()
+    print(f"   Unique fraud sender IDs: {len(fraud_senders)}")
+    print(f"   Most reused fraud sender: {fraud_senders.iloc[0]} times")
+    print(f"   Avg reuse per fraud sender: {fraud_senders.mean():.1f} times")
     
     # Save
     output_path = 'data/raw/mpesa_sms_messages.csv'
@@ -611,24 +598,26 @@ def main():
     # Show samples
     print(f"\n🔍 Sample Messages:\n")
     print("="*70)
-    print("LEGITIMATE PAYMENT WITH LINK:")
+    print("LEGITIMATE PAYMENT:")
     print("="*70)
-    legit_with_link = df[(df['is_fraud']==0) & (df['message_text'].str.contains('http|bit.ly', case=False))]
-    if len(legit_with_link) > 0:
-        sample = legit_with_link.iloc[0]
-        print(f"Sender: {sample['sender_id']}")
-        print(f"Message: {sample['message_text']}\n")
+    legit_payment = df[(df['is_fraud']==0) & (df['message_type']=='payment_confirmation')].iloc[0]
+    print(f"Sender: {legit_payment['sender_id']}")
+    print(f"Message: {legit_payment['message_text']}\n")
     
     print("="*70)
-    print("FRAUD WITH PHISHING LINK:")
+    print("FRAUD WITH CAMPAIGN BEHAVIOR (smart_social):")
     print("="*70)
-    fraud_sample = df[df['fraud_type']=='phishing_link'].iloc[0]
-    print(f"Sender: {fraud_sample['sender_id']}")
-    print(f"Message: {fraud_sample['message_text']}\n")
+    fraud_sample = df[df['fraud_type']=='smart_social'].head(2)
+    for idx, row in fraud_sample.iterrows():
+        print(f"Sender: {row['sender_id']}")
+        print(f"Timestamp: {row['timestamp']}")
+        print(f"Amount: {row['amount']}")
+        print(f"Message: {row['message_text'][:100]}...")
+        print()
     
     print("="*70)
     print("✨ Dataset generation complete!")
     print("="*70)
-    
+
 if __name__ == "__main__":
     main()

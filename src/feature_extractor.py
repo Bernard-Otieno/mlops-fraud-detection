@@ -14,7 +14,19 @@ AUTHORITY_PHRASES = [
     "support",
     "help desk",
     "mpesa menu",
-    "official"
+    "official",
+    "mpesa team",
+    "service desk"
+]
+SOFT_ACTIONS = [
+    "update your details",
+    "verify your account",
+    "confirm your information",
+    "secure your account",
+    "reset your password", 
+    "click the link below",
+    "visit the link",
+    "log in to your account"
 ]
 
 OFFICIAL_DOMAINS = [
@@ -50,11 +62,9 @@ transaction_signals = [
     'transaction cost',
     'new m-pesa balance'
 ]
-
-
-
-
-
+PERSUASIVE_PHRASES = [
+    "please", "kindly", "we request you", "we urge you", "note","ensure"
+]
 # -----------------------------
 # Helper functions
 # -----------------------------
@@ -144,20 +154,33 @@ def extract_features(message_text, sender_id):
     features["sender_id_mismatch"] = int(is_confirmed_msg and sender_norm != "MPESA")
     features["has_ksh"] = int("ksh" in text_lower)
 
+    features["sender_mentions_contact"] = int(
+    any(w in text_lower for w in ["call", "contact", "reach out"])
+    )
+
+    features["receipt_with_contact"] = int(
+    features["has_confirmed"] and features["sender_mentions_contact"]
+    )
+    features["persuasion_count"] = sum(1 for phrase in PERSUASIVE_PHRASES if phrase in text_lower)
+
     # ---- Amount features ----
     amounts = re.findall(r'Ksh\s?([\d,]+(?:\.\d+)?)', text)
     features["amount_count"] = len(amounts)
 
-    
-
+    soft_count = sum(1 for phrase in SOFT_ACTIONS if phrase in text_lower)
+    features["soft_action_present"] = int(soft_count > 0)
+    features['soft_action_count'] = soft_count
     # ---- Urgency features ----
     
     urgent_count = sum(1 for word in words if word in URGENT_WORDS)
-    features["urgent_density"] = urgent_count / features["message_length"] if features["message_length"] > 0 else 0.0
+    features["urgent_count"] = urgent_count
+    features["has_urgent"] = int(urgent_count > 0)
+
 
     # Action verbs
     action_count = sum(text_lower.count(v) for v in ACTION_VERBS)
-    features["action_verb_count"] = action_count/features["message_length"] if features["message_length"] > 0 else 0.0
+    features["action_verb_count"] = action_count
+    features['has_action_verb'] = int(action_count > 0)
 
     # transaction signals
     present = sum(1 for s in transaction_signals if s in text_lower)
@@ -171,19 +194,25 @@ def extract_features(message_text, sender_id):
     features['exclamation_count'] = text.count('!')
 
 
+    #social engineering features
+    features['has_social_engineering'] = int(any(phrase in text_lower for phrase in PERSUASIVE_PHRASES))
+
+
     # 3. Urgency Screaming: Count words that are fully CAPITALIZED (excluding 'KSH')
     all_caps_words = re.findall(r'\b[A-Z]{3,}\b', text)
     caps_count = sum(1 for c in message_text if c.isupper())
 
     features['all_caps_ratio'] = caps_count / features['message_length'] if features['message_length'] > 0 else 0.0
-    features['exclamation_ratio'] = features['exclamation_ratio'] = (
-    message_text.count('!') / features['message_length']
-    ) if features['message_length'] > 0 else 0.0
+    features["has_exclamation"] = int(features["exclamation_count"] > 0)
+    features['exclamation_ratio'] = features['exclamation_count'] / features['message_length'] if features['message_length'] > 0 else 0.0
+
     # 4. Fake Confirmation: Presence of 'confirmed
     features['fake_confirmation'] = int("confirmed" in text_lower and not features['is_valid_sender'])
 
     # 5. Authority Phrases: Presence of authority phrases
-    features['authority_density'] = sum(1 for phrase in AUTHORITY_PHRASES if phrase in text_lower) / features['message_length'] if features['message_length'] > 0 else 0.0
+    authority_count = sum(1 for phrase in AUTHORITY_PHRASES if phrase in text_lower)
+    features['authority_count'] = authority_count
+    features['authority_density'] = int(authority_count > 0)
 
     # ---- Link features ----
     links = find_links(text)
@@ -202,12 +231,32 @@ def extract_features(message_text, sender_id):
         is_official = any(dom in links[0] for dom in OFFICIAL_DOMAINS)
         is_phishy_link = 1 if not is_official else 0
     features["is_phishy_link"] = is_phishy_link
-
-
     
-
+    features["has_link"] = int(len(links) > 0)
+    features["link_and_balance"] = int(features["has_link"] and "balance" in text_lower)
+    features["link_and_confirmed"] = int(features["has_link"] and "confirmed" in text_lower)
+        # Extract detailed link features
     link_features = extract_link_features(text)
     features.update(link_features)
+
+    features["amount_outlier"] = int(
+    len(amounts) > 0 and (
+        float(amounts[0].replace(",", "")) > 500000
+        or float(amounts[0].replace(",", "")) < 10
+        )
+    )
+    features["receipt_sender_mismatch"] = int(
+    features["has_confirmed"] and sender_norm != "MPESA"
+    )
+
+    features["balance_missing"] = int(
+    features["has_confirmed"] and "balance" not in text_lower
+    )
+
+
+
+
+
     return features
 
 # -----------------------------
