@@ -319,16 +319,3 @@ print("\n" + "="*70)
 print("✨ MODEL SAVED SUCCESSFULLY!")
 print("="*70)
 
-
-# ```
-
-# ---
-
-# ## **Expected Results with Fix 1:**
-# ```
-# 📊 FINAL LEADERBOARD
-#                  Model  Precision  Recall      F1
-#               XGBoost      0.892   0.847   0.869
-#         Random Forest      0.876   0.823   0.849
-#         Decision Tree      0.831   0.789   0.809
-#   Logistic Regression      0.798   0.756   0.776
