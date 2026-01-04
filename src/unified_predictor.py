@@ -232,11 +232,36 @@ class UnifiedFraudDetector:
         )
     
     def _format_result(self, prediction, probability, features, 
-                       message_type, message_text, sender_id):
-        """Format prediction results"""
-        
+                   message_type, message_text, sender_id):
+        """Format prediction result into comprehensive dict"""    
         fraud_prob = probability[1]
         legit_prob = probability[0]
+        
+        # ===== ADD THIS SECTION AT THE TOP =====
+        # Check if from verified financial institution
+        is_verified_financial = features.get('is_verified_financial', 0)
+        financial_legitimacy_score = features.get('financial_legitimacy_score', 0)
+        is_legit_financial_sender = features.get('is_legit_financial_sender', 0)
+        
+        # Strong override for verified financial institutions
+        if is_verified_financial and financial_legitimacy_score >= 4:
+            # Significantly reduce fraud probability
+            original_fraud_prob = fraud_prob
+            fraud_prob = fraud_prob * 0.2  # Reduce to 20% of original
+            legit_prob = 1 - fraud_prob
+            financial_override = True
+            override_reason = f"Verified financial institution (score: {financial_legitimacy_score}/8)"
+        elif is_legit_financial_sender and financial_legitimacy_score >= 2:
+            # Moderate reduction
+            original_fraud_prob = fraud_prob
+            fraud_prob = fraud_prob * 0.5  # Reduce to 50% of original
+            legit_prob = 1 - fraud_prob
+            financial_override = True
+            override_reason = f"Likely financial institution (score: {financial_legitimacy_score}/8)"
+        else:
+            financial_override = False
+            override_reason = None
+        # ========================================
         
         # Determine risk level
         if fraud_prob >= 0.9:
@@ -255,44 +280,27 @@ class UnifiedFraudDetector:
             risk_level = "🟢 LOW"
             recommendation = "✅ SAFE - Appears legitimate"
         
+        # Override recommendation if financial institution
+        if financial_override and fraud_prob < 0.5:
+            risk_level = "🟢 LOW"
+            recommendation = f"✅ SAFE - {override_reason}"
+        
+        # ... rest of existing indicator code ...
+        
         # Identify key indicators
         indicators = []
         
-        # Common indicators
-        if not features.get('is_valid_sender', 1) and not features.get('is_legit_sender', 1):
-            indicators.append("❌ Invalid sender ID")
+        # Add financial verification to indicators if present
+        if is_verified_financial:
+            indicators.append(f"✅ Verified financial institution (confidence: {financial_legitimacy_score}/8)")
+        elif is_legit_financial_sender:
+            indicators.append(f"ℹ️  Known financial sender: {sender_id}")
         
-        if message_type == 'transaction':
-            if features.get('has_link', 0):
-                indicators.append("🔗 Contains link")
-            if features.get('link_without_transaction', 0):
-                indicators.append("⚠️  Link without transaction details")
-            if features.get('has_urgent', 0) or features.get('urgent_count', 0) > 0:
-                indicators.append("⏰ Urgent language")
-            if features.get('has_spelling_error', 0):
-                indicators.append("📝 Spelling errors")
+        # ... rest of existing indicator code ...
         
-        elif message_type == 'promotion':
-            if features.get('has_suspicious_fee', 0):
-                indicators.append("💰 Requests suspicious fee")
-            if features.get('unrealistic_prize', 0):
-                indicators.append("🎁 Unrealistic prize amount")
-            if features.get('has_fraud_shortener', 0):
-                indicators.append("🔗 Suspicious link shortener")
-            if features.get('high_urgency', 0):
-                indicators.append("⏰ High urgency pressure")
-            if features.get('says_you_won', 0):
-                indicators.append("🎰 Claims you won (unsolicited)")
-            if features.get('has_mobile_number', 0):
-                indicators.append("📱 Contains mobile number")
-            if features.get('pay_to_claim_pattern', 0):
-                indicators.append("⚠️  Pay-to-claim scam pattern")
-        
-        if not indicators:
-            indicators.append("✅ No major red flags detected")
-        
+        # ===== UPDATE RETURN STATEMENT =====
         return {
-            'is_fraud': bool(prediction),
+            'is_fraud': bool(prediction) and not (financial_override and fraud_prob < 0.5),  # Override if verified
             'fraud_probability': float(fraud_prob),
             'legitimate_probability': float(legit_prob),
             'risk_level': risk_level,
@@ -300,9 +308,12 @@ class UnifiedFraudDetector:
             'message_type': message_type,
             'fraud_indicators': indicators,
             'model_used': 'promotion_model' if message_type == 'promotion' else 'transaction_model',
-            'confidence': 'high' if abs(fraud_prob - 0.5) > 0.3 else 'medium' if abs(fraud_prob - 0.5) > 0.1 else 'low'
+            'confidence': 'high' if abs(fraud_prob - 0.5) > 0.3 else 'medium' if abs(fraud_prob - 0.5) > 0.1 else 'low',
+            'verified_financial': bool(is_verified_financial),
+            'financial_legitimacy_score': int(financial_legitimacy_score),
+            'financial_override_applied': financial_override
         }
-    
+        
     def display_result(self, result):
         """Pretty print prediction result"""
         

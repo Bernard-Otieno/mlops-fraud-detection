@@ -65,6 +65,73 @@ transaction_signals = [
 PERSUASIVE_PHRASES = [
     "please", "kindly", "we request you", "we urge you", "note","ensure"
 ]
+# ============================================================================
+# LEGITIMATE FINANCIAL INSTITUTIONS IN KENYA
+# ============================================================================
+
+LEGIT_FINANCIAL_SENDERS = [
+    # Mobile money
+    'MPESA', 'M-PESA', 'SAFARICOM',
+    
+    # Banks
+    'EQUITY', 'KCB', 'COOPERATIVE', 'CO-OPBANK', 'COOP', 'ABSA', 'NCBA',
+    'STANBIC', 'STANDARDCHARTERED', 'STANDARD CHARTERED', 'DTB', 'DIAMONDTRUST', 
+    'DIAMOND TRUST', 'BARCLAYS', 'FAMILYBANK', 'FAMILY BANK', 'IANDMBANK', 
+    'GTBANK', 'ECOBANK', 'SIDIANBANK', 'SIDIAN',
+    
+    # Payment gateways
+    'PESAPAL', 'IPAY', 'JENGA', 'FLUTTERWAVE', 'PAYPAL', 'STRIPE',
+    'DPO', 'CELLULANT', 'KOPOKOPO', 'BEYONIC',
+    
+    # Fintech/Digital lenders
+    'TALA', 'BRANCH', 'MSHWARI', 'KCBMPESA', 'FULIZA', 'OKASH',
+    'ZENKA', 'TIMIZA', 'SAIDA', 'BERRY',
+    
+    # Telcos
+    'AIRTEL', 'AIRTELMONEY', 'TELKOM', 'TKASH',
+    
+    # Utility providers
+    'KPLC', 'KENYAPOWER', 'KENYA POWER', 'NAIROBI WATER', 'NWSC', 'NCWSC'
+]
+
+LEGIT_CONTACT_NUMBERS = [
+    # M-PESA
+    '100', '200', '234', '333',
+    
+    # Banks (customer care)
+    '0719088000',  # Equity
+    '2422222000',  # KCB
+    '0711049000',  # Co-op Bank
+    '0711056000',  # ABSA
+    '0703088000',  # NCBA
+    '0860126000',  # Stanbic
+    
+    # Common short codes
+    '0722000000', '0733000000'
+]
+
+LEGIT_FINANCIAL_DOMAINS = [
+    # Banks
+    'equitybank.co.ke', 'kcb.co.ke', 'co-opbank.co.ke', 'absa.co.ke',
+    'ke.ncbagroup.com', 'stanbicbank.co.ke', 'sc.com/ke', 'dtbafrica.com',
+    
+    # Payment gateways
+    'pesapal.com', 'ipayafrica.com', 'flutterwave.com', 'jenga.io',
+    
+    # M-PESA
+    'safaricom.co.ke', 'mpesa.co.ke', 'm-pesa.com',
+    
+    # Google/International
+    'g.co', 'google.com', 'goo.gl', 'helppay'
+]
+
+LEGIT_REFERENCE_PATTERNS = [
+    r'Ref[:.]\s*[A-Z0-9]{8,15}',
+    r'Reference[:.]\s*[A-Z0-9]{8,15}',
+    r'Confirmation code[:.]\s*[A-Z0-9]{8,15}',
+    r'Trans(?:action)? ID[:.]\s*[A-Z0-9]{8,15}',
+    r'\b[A-Z]{2,3}\d{5,10}\b'  # Pattern like TJT6D8OUH1
+]
 # -----------------------------
 # Helper functions
 # -----------------------------
@@ -118,9 +185,89 @@ def extract_link_features(text):
 
     return features
 
+
+
+def extract_financial_legitimacy_features(message_text, sender_id):
+    """
+    Detect if message is from legitimate financial institution
+    Reduces false positives from banks and payment gateways
+    """
+    features = {}
+    
+    text_lower = message_text.lower()
+    sender_lower = sender_id.lower()
+    
+    # 1. Check sender against whitelist
+    features['is_legit_financial_sender'] = int(
+        any(inst in sender_lower for inst in LEGIT_FINANCIAL_SENDERS)
+    )
+    
+    # 2. Check for legitimate contact numbers
+    features['has_legit_financial_contact'] = int(
+        any(num in message_text for num in LEGIT_CONTACT_NUMBERS)
+    )
+    
+    # 3. Check for legitimate domains
+    features['has_legit_financial_domain'] = int(
+        any(domain in text_lower for domain in LEGIT_FINANCIAL_DOMAINS)
+    )
+    
+    # 4. Check for legitimate reference patterns
+    features['has_legit_reference'] = int(
+        any(re.search(pattern, message_text) for pattern in LEGIT_REFERENCE_PATTERNS)
+    )
+    
+    # 5. Bank-specific patterns
+    bank_indicators = [
+        'card', 'forex charge', '****', 'account', 'paybill',
+        'till', 'bill payment', 'acc ', '(acc'
+    ]
+    features['has_bank_indicators'] = int(
+        sum(1 for ind in bank_indicators if ind in text_lower) >= 2
+    )
+    
+    # 6. Payment gateway indicators
+    payment_gateway_indicators = [
+        'completed', 'confirmation code', 'transaction code',
+        'payment to', 'payment of', 'has completed', 'successfully'
+    ]
+    features['has_payment_gateway_pattern'] = int(
+        any(ind in text_lower for ind in payment_gateway_indicators)
+    )
+    
+    # 7. Masked card number pattern (****1234)
+    features['has_masked_card'] = int(bool(re.search(r'\*{4}\d{4}', message_text)))
+    
+    # 8. International transaction indicators
+    intl_indicators = ['forex', 'usd', 'eur', 'gbp', 'international', 'foreign']
+    features['has_intl_indicators'] = int(
+        any(ind in text_lower for ind in intl_indicators)
+    )
+    
+    # 9. Composite legitimacy score (0-8)
+    legitimacy_signals = [
+        features['is_legit_financial_sender'],
+        features['has_legit_financial_contact'],
+        features['has_legit_financial_domain'],
+        features['has_legit_reference'],
+        features['has_bank_indicators'],
+        features['has_payment_gateway_pattern'],
+        features['has_masked_card'],
+        features['has_intl_indicators']
+    ]
+    
+    features['financial_legitimacy_score'] = sum(legitimacy_signals)
+    
+    # High confidence if 3+ signals present
+    features['is_verified_financial'] = int(features['financial_legitimacy_score'] >= 3)
+    
+    return features
+
 # -----------------------------
 # Main feature extractor
 # -----------------------------
+
+
 
 def extract_features(message_text, sender_id):
     features = {}
@@ -252,6 +399,8 @@ def extract_features(message_text, sender_id):
     features["balance_missing"] = int(
     features["has_confirmed"] and "balance" not in text_lower
     )
+    financial_features = extract_financial_legitimacy_features(message_text, sender_id)
+    features.update(financial_features)
 
 
 

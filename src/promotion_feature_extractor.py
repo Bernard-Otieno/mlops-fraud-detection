@@ -8,6 +8,8 @@ import numpy as np
 import re
 import os
 
+from feature_extractor import extract_financial_legitimacy_features
+
 # ============================================================================
 # CONSTANTS - Based on Real Safaricom Patterns
 # ============================================================================
@@ -44,7 +46,8 @@ SAFARICOM_BRANDS = [
     'mwelekoni',
     'safaricom@25',
     'transforming lives',
-    'lipa na m-pesa'
+    'lipa na m-pesa',
+    'ziidi'
 ]
 
 LEGIT_CONTACTS = [
@@ -500,6 +503,8 @@ def extract_all_features(message_text, sender_id):
     all_features.update(extract_language_features(message_text))
     all_features.update(extract_legitimacy_features(message_text))
     all_features.update(extract_scam_patterns(message_text))
+    financial_features = extract_financial_legitimacy_features(message_text, sender_id)
+    all_features.update(financial_features)
     
     # Add composite features
     all_features.update(extract_composite_features(all_features))

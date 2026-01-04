@@ -17,7 +17,7 @@
     "sender_seen_before",
     "burst_activity"
   ],
-  "training_date": "2026-01-03T20:38:01.820024",
+  "training_date": "2026-01-04T14:07:32.106047",
   "training_samples": 10000,
   "fraud_rate": 0.3082,
   "performance": {

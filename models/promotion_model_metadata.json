@@ -73,7 +73,7 @@
     "message_text"
   ],
   "feature_count": 70,
-  "training_date": "2026-01-03T20:11:17.797043",
+  "training_date": "2026-01-04T14:06:49.230187",
   "performance": {
     "accuracy": 0.983,
     "precision": 0.9777777777777777,
