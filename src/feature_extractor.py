@@ -91,7 +91,10 @@ LEGIT_FINANCIAL_SENDERS = [
     'AIRTEL', 'AIRTELMONEY', 'TELKOM', 'TKASH',
     
     # Utility providers
-    'KPLC', 'KENYAPOWER', 'KENYA POWER', 'NAIROBI WATER', 'NWSC', 'NCWSC'
+    'KPLC', 'KENYAPOWER', 'KENYA POWER', 'NAIROBI WATER', 'NWSC', 'NCWSC',
+    
+    #financial services (MMFs, insurance, investments)
+    'ZIIDI','CHUMZ', 'OLDMUTUAL'
 ]
 
 LEGIT_CONTACT_NUMBERS = [
