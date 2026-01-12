@@ -40,3 +40,7 @@ Thumbs.db
 # Logs
 logs/*.log
 *.log
+
+
+#env files
+.env
