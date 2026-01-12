@@ -37,8 +37,8 @@ FEATURES = [
     'has_urgent',
     'exclamation_ratio',
     'reused_amount',
-    'transaction_completeness',
     'is_valid_sender',
+    'transaction_completeness',
     'has_link',
     'link_with_urgency',
     'link_without_transaction',
@@ -218,6 +218,25 @@ if best_model_name in ['Decision Tree', 'Random Forest', 'XGBoost']:
     }).sort_values('importance', ascending=False).head(10)
     
     print(feature_importance.to_string(index=False))
+if best_model_name in ['Logistic Regression']:
+    print("\n📊 Top 10 Coefficients (Absolute Value):")
+    
+    # Get feature names after preprocessing
+    num_features = FEATURES
+    text_features = best_pipe.named_steps['prep'].named_transformers_['text'].get_feature_names_out()
+    all_feature_names = num_features + list(text_features)
+    
+    # Get coefficients
+    coefs = best_pipe.named_steps['clf'].coef_[0]
+    
+    # Sort and display top 10 by absolute value
+    coef_df = pd.DataFrame({
+        'feature': all_feature_names,
+        'coefficient': coefs,
+        'abs_coefficient': abs(coefs)
+    }).sort_values('abs_coefficient', ascending=False).head(10)
+    
+    print(coef_df[['feature', 'coefficient']].to_string(index=False))
 
 # ============================================================================
 # ERROR ANALYSIS

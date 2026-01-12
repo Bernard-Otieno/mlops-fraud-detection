@@ -76,7 +76,7 @@ LEGIT_FINANCIAL_SENDERS = [
     # Banks
     'EQUITY', 'KCB', 'COOPERATIVE', 'CO-OPBANK', 'COOP', 'ABSA', 'NCBA',
     'STANBIC', 'STANDARDCHARTERED', 'STANDARD CHARTERED', 'DTB', 'DIAMONDTRUST', 
-    'DIAMOND TRUST', 'BARCLAYS', 'FAMILYBANK', 'FAMILY BANK', 'IANDMBANK', 
+    'DIAMOND TRUST', 'BARCLAYS', 'FamilyBank', 'IANDMBANK', 
     'GTBANK', 'ECOBANK', 'SIDIANBANK', 'SIDIAN',
     
     # Payment gateways
@@ -91,7 +91,7 @@ LEGIT_FINANCIAL_SENDERS = [
     'AIRTEL', 'AIRTELMONEY', 'TELKOM', 'TKASH',
     
     # Utility providers
-    'KPLC', 'KENYAPOWER', 'KENYA POWER', 'NAIROBI WATER', 'NWSC', 'NCWSC',
+    'KPLC', 'KENYAPOWER', 'KENYA POWER', 'NAIROBI WATER', 'NWSC', 'NCWSC','EVOPAY'
     
     #financial services (MMFs, insurance, investments)
     'ZIIDI','CHUMZ', 'OLDMUTUAL'

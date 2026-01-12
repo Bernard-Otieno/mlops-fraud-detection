@@ -3,8 +3,8 @@ action_verb_count
 has_urgent
 exclamation_ratio
 reused_amount
-transaction_completeness
 is_valid_sender
+transaction_completeness
 has_link
 link_with_urgency
 link_without_transaction

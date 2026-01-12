@@ -6,8 +6,8 @@
     "has_urgent",
     "exclamation_ratio",
     "reused_amount",
-    "transaction_completeness",
     "is_valid_sender",
+    "transaction_completeness",
     "has_link",
     "link_with_urgency",
     "link_without_transaction",
@@ -17,7 +17,7 @@
     "sender_seen_before",
     "burst_activity"
   ],
-  "training_date": "2026-01-04T14:07:32.106047",
+  "training_date": "2026-01-05T16:03:09.563788",
   "training_samples": 10000,
   "fraud_rate": 0.3082,
   "performance": {
