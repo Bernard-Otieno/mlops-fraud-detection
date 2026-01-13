@@ -16,10 +16,7 @@ from datetime import datetime
 # ============================================================================
 # FIX 1: WINDOWS UNICODE & EMOJI SUPPORT
 # ============================================================================
-if sys.platform == 'win32':
-    # Force the console output to use UTF-8 to prevent 'charmap' errors
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+
 
 # Setup logging with explicit UTF-8 encoding for the file
 logging.basicConfig(
@@ -53,12 +50,16 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024
 
 # Initialize fraud detector
 logger.info("🔄 Loading fraud detection models...")
-try:
-    detector = UnifiedFraudDetector()
-    logger.info("✅ Models loaded successfully!")
-except Exception as e:
-    logger.error(f"❌ Failed to load models: {e}")
-    detector = None
+detector = None
+
+def get_detector():
+    global detector
+    if detector is None:
+        logger.info("🔄 Lazy-loading fraud detection models...")
+        detector = UnifiedFraudDetector()
+        logger.info("✅ Models loaded successfully!")
+    return detector
+
 
 usage_stats = {
     'total_messages': 0,
@@ -119,10 +120,9 @@ def format_whatsapp_response(result):
 
 @app.route('/whatsapp', methods=['POST'])
 def whatsapp_webhook():
-    if detector is None:
-        resp = MessagingResponse()
-        resp.message("⚠️ Bot is currently offline for maintenance.")
-        return str(resp)
+    detector = get_detector()
+    result = detector.predict(incoming_msg, sender_id)
+
     
     incoming_msg = request.values.get('Body', '').strip()
     sender_number = request.values.get('From', '')
@@ -167,7 +167,7 @@ def whatsapp_webhook():
 
 @app.route('/health', methods=['GET'])
 def health_check():
-    return {'status': 'healthy', 'timestamp': datetime.now().isoformat()}
+     return "OK", 200
 
 @app.route('/', methods=['GET'])
 def home():
