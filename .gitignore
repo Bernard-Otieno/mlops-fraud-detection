@@ -18,9 +18,9 @@ data/processed/*
 !data/processed/.gitkeep
 
 # Models
-models/*.pkl
-models/*.joblib
-models/*.h5
+# models/*.pkl
+# models/*.joblib
+# models/*.h5
 
 # Jupyter
 .ipynb_checkpoints/
