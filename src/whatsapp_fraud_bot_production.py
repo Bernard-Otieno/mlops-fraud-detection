@@ -120,49 +120,41 @@ def format_whatsapp_response(result):
 
 @app.route('/whatsapp', methods=['POST'])
 def whatsapp_webhook():
-    detector = get_detector()
-    result = detector.predict(incoming_msg, sender_id)
 
-    
-    incoming_msg = request.values.get('Body', '').strip()
+    if detector is None:
+        resp = MessagingResponse()
+        resp.message("⚠️ Bot is currently offline for maintenance.")
+        return str(resp)
+
+    # ✅ ALWAYS extract first
+    incoming_msg = request.values.get('Body', '')
     sender_number = request.values.get('From', '')
-    
-    logger.info(f"📱 Processing message from {sender_number}")
-    
+
     resp = MessagingResponse()
     msg = resp.message()
-    
-    if not incoming_msg:
+
+    if not incoming_msg or not incoming_msg.strip():
         msg.body("Please send a message to analyze. 📱")
         return str(resp)
-    
-    incoming_lower = incoming_msg.lower().strip()
-    
-    # Handle basic commands
-    if incoming_lower in ['help', 'start', 'hi', 'hello']:
-        msg.body("Forward any suspicious M-PESA message here to analyze it.")
-        return str(resp)
 
-    # Analyze message for fraud
+    incoming_msg = incoming_msg.strip()
+
     try:
         logger.info("🔍 Analyzing message...")
-        
-        # USE THE IMPROVED EXTRACTION
+
         sender_id = extract_sender_id(incoming_msg)
-        
         result = detector.predict(incoming_msg, sender_id)
-        logger.info(f"✅ Analysis complete: {result['risk_level']}")
-        
+
         prediction_type = 'fraud' if result['is_fraud'] else 'legitimate'
         log_usage(sender_number, len(incoming_msg), prediction_type)
-        
+
         msg.body(format_whatsapp_response(result))
-        
+
     except Exception as e:
-        logger.error(f"❌ Error: {e}", exc_info=True)
+        logger.error(f"❌ Error in prediction: {e}", exc_info=True)
         usage_stats['errors'] += 1
         msg.body("⚠️ Sorry, I encountered an error. Please try again.")
-    
+
     return str(resp)
 
 @app.route('/health', methods=['GET'])
