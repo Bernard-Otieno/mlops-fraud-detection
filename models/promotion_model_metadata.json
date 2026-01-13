@@ -1,5 +1,5 @@
 {
-  "model_type": "Random Forest",
+  "model_type": "Logistic Regression",
   "features": [
     "is_legit_sender",
     "sender_is_number",
@@ -69,12 +69,17 @@
     "legitimacy_score",
     "high_legitimacy",
     "fraud_risk_score",
-    "high_fraud_risk"
+    "high_fraud_risk",
+    "message_text"
   ],
-  "feature_count": 69,
-  "training_date": "2026-01-12T19:14:26.184795",
+  "feature_count": 70,
+  "training_date": "2026-01-13T19:56:00.855369",
   "performance": {
-    "f1_score": 0.9789864029666254
+    "accuracy": 0.983,
+    "precision": 0.9777777777777777,
+    "recall": 0.9801980198019802,
+    "f1_score": 0.9789864029666254,
+    "auc": 0.9831882517110773
   },
   "model_purpose": "promotion_fraud_detection"
 }
