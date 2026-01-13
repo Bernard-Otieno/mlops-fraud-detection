@@ -6,12 +6,13 @@ Uses Twilio + Flask to provide fraud analysis via WhatsApp
 from flask import Flask, request
 from twilio.twiml.messaging_response import MessagingResponse
 from twilio.rest import Client
+
 import os
 import sys
 from pathlib import Path
 
 # Add project root to path
-project_root = str(Path(__file__).parent)
+project_root = str(Path(__file__).parent.parent)
 sys.path.insert(0, project_root)
 
 # Import your fraud detector
@@ -22,8 +23,8 @@ from src.unified_predictor import UnifiedFraudDetector
 # ============================================================================
 
 # Twilio credentials (get from https://console.twilio.com)
-TWILIO_ACCOUNT_SID = os.environ.get('TWILIO_ACCOUNT_SID', 'your_account_sid_here')
-TWILIO_AUTH_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN', 'your_auth_token_here')
+TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
+TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
 
 # Initialize Flask app
 app = Flask(__name__)
