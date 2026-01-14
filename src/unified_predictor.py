@@ -278,9 +278,13 @@ class UnifiedFraudDetector:
             'free gift',
             'instant win'
         ]
-
-        features = {}
         
+        features = {}
+
+        if all_features is None:
+            all_features = features
+
+
         sender_lower = sender_id.lower()
         
         # Valid Safaricom senders
@@ -597,7 +601,7 @@ class UnifiedFraudDetector:
             # Default to transaction (safer choice)
             return 'transaction'
     
-    def predict(self, message_text, sender_id='UNKNOWN', all_features=None):
+    def predict(self, message_text, sender_id='UNKNOWN'):
         """
         Main prediction method
         
@@ -614,7 +618,7 @@ class UnifiedFraudDetector:
         
         # Extract features
         if msg_type == 'promotion':
-            features = self._extract_promotional_features(message_text, sender_id, all_features)
+            features = self._extract_promotional_features(message_text, sender_id)
         else:
             features = self._extract_transaction_features(message_text, sender_id)
         
