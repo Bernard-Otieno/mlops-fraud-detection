@@ -36,7 +36,6 @@ FEATURES = [
     'action_verb_count',
     'has_urgent',
     'exclamation_ratio',
-    'reused_amount',
     'is_valid_sender',
     'transaction_completeness',
     'has_link',
@@ -45,8 +44,6 @@ FEATURES = [
     'has_spelling_error',
     'soft_action_count',
     'authority_count',
-    'sender_seen_before',
-    'burst_activity'
 ]
 
 X = df[FEATURES + ['message_text']]
