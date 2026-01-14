@@ -1,6 +1,6 @@
 """
-M-PESA Fraud Detection WhatsApp Bot
-Uses Twilio + Flask to provide fraud analysis via WhatsApp
+M-PESA Fraud Detection WhatsApp Bot - FIXED SENDER PROMPT
+Properly asks users for sender information
 """
 import logging
 
@@ -13,35 +13,27 @@ logger = logging.getLogger(__name__)
 
 from flask import Flask, request
 from twilio.twiml.messaging_response import MessagingResponse
-from twilio.rest import Client
-
 import os
 import sys
 from pathlib import Path
-
-user_sessions = {}
+import re
 
 # Add project root to path
 project_root = str(Path(__file__).parent.parent)
 sys.path.insert(0, project_root)
 
-# Import your fraud detector
 from src.unified_predictor import UnifiedFraudDetector
 
 # ============================================================================
-# CONFIGURATION
+# GLOBAL STATE
 # ============================================================================
 
-# Twilio credentials (get from https://console.twilio.com)
-TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
-TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
-
-# Initialize Flask app
 app = Flask(__name__)
-
 detector = None
+user_sessions = {}  # Store conversation state per user
 
 def get_detector():
+    """Lazy-load the fraud detector"""
     global detector
     if detector is None:
         logger.info("🔄 Loading fraud detection models...")
@@ -49,17 +41,64 @@ def get_detector():
         logger.info("✅ Models loaded successfully!")
     return detector
 
+
 # ============================================================================
 # HELPER FUNCTIONS
 # ============================================================================
 
-def format_whatsapp_response(result):
+def extract_sender_from_message(message_text):
     """
-    Format fraud detection result for WhatsApp
-    Keep it concise and emoji-rich for mobile reading
+    Try to auto-extract sender from the message itself
+    Returns (sender_id, cleaned_message) or (None, original_message)
     """
     
-    # Risk level emoji mapping
+    # Pattern 1: "MPESA: Confirmed..."
+    match = re.match(r'^([A-Z0-9-]+):\s*(.+)', message_text, re.IGNORECASE)
+    if match:
+        return match.group(1).strip(), match.group(2).strip()
+    
+    # Pattern 2: "From SAFARICOM - Confirmed..."
+    match = re.match(r'^(?:From|Sender)\s+([A-Z0-9-]+)\s*[-:]\s*(.+)', message_text, re.IGNORECASE)
+    if match:
+        return match.group(1).strip(), match.group(2).strip()
+    
+    # Pattern 3: First word is all caps and short (likely sender)
+    words = message_text.split()
+    if words and len(words[0]) <= 15 and words[0].isupper():
+        return words[0], ' '.join(words[1:])
+    
+    return None, message_text
+
+
+def is_valid_sender_format(sender_text):
+    """
+    Check if user's reply looks like a sender ID
+    """
+    sender_text = sender_text.strip()
+    
+    # Must be short
+    if len(sender_text) > 20 or len(sender_text) < 2:
+        return False
+    
+    # No spaces allowed (unless it's "M-PESA")
+    if ' ' in sender_text and sender_text != "M-PESA":
+        return False
+    
+    # Common non-sender words
+    invalid_words = {'ok', 'yes', 'no', 'thanks', 'help', 'about', 'please', 'send'}
+    if sender_text.lower() in invalid_words:
+        return False
+    
+    # Must contain letters or numbers
+    if not any(c.isalnum() for c in sender_text):
+        return False
+    
+    return True
+
+
+def format_whatsapp_response(result):
+    """Format fraud detection result for WhatsApp"""
+    
     risk_emoji = {
         "🔴 CRITICAL": "🚨",
         "🟠 HIGH": "⚠️",
@@ -70,244 +109,257 @@ def format_whatsapp_response(result):
     
     emoji = risk_emoji.get(result['risk_level'], "ℹ️")
     
-    # Build response
-    response = f"{emoji} *FRAUD ANALYSIS RESULT*\n\n"
+    response = f"{emoji} *FRAUD ANALYSIS*\n\n"
+    response += f"*Risk:* {result['risk_level']}\n"
+    response += f"*Probability:* {result['fraud_probability']*100:.0f}%\n\n"
+    response += f"{result['recommendation']}\n\n"
     
-    # Risk assessment
-    response += f"*Risk Level:* {result['risk_level']}\n"
-    response += f"*Fraud Probability:* {result['fraud_probability']*100:.0f}%\n\n"
+    # Add verification tip based on risk
+    if result['fraud_probability'] >= 0.5:
+        response += "📞 *Verify with Safaricom:*\n"
+        response += "• Call 100 (Customer Care)\n"
+        response += "• Call 234 (M-PESA)\n\n"
     
-    # Recommendation
-    response += f"*Recommendation:*\n{result['recommendation']}\n\n"
-    
-    # Key indicators (max 3 for mobile readability)
-    if result['fraud_indicators']:
-        response += "*🔍 Key Findings:*\n"
-        for indicator in result['fraud_indicators'][:3]:  # Show top 3
-            response += f"• {indicator}\n"
-    
-    # Add footer
-    response += f"\n_Analysis by M-PESA Fraud Detector_"
+    response += "_Powered by AI Fraud Detection_"
     
     return response
 
 
-# def extract_sender_from_message(message_text):
-#     """
-#     Try to extract sender ID from forwarded message
-#     Users might forward messages like: "From: MPESA - Confirmed..."
-#     """
-    
-#     # Common patterns
-#     patterns = [
-#         r'(?:From|Sender|FROM|SENDER):\s*([A-Z0-9-]+)',
-#         r'^([A-Z]{3,})\s*[-:]',  # MPESA: or SAFARICOM-
-#     ]
-    
-#     import re
-#     for pattern in patterns:
-#         match = re.search(pattern, message_text)
-#         if match:
-#             return match.group(1).strip()
-    
-#     # Default if can't extract
-#     return 'UNKNOWN'
-
-
 def format_help_message():
-    """Help message for users"""
-    
-    return """👋 *Welcome to M-PESA Fraud Detector!*
+    """Help message"""
+    return """👋 *M-PESA Fraud Detector*
 
 📱 *How to use:*
-Simply forward any suspicious M-PESA or Safaricom message to this number, and I'll analyze it for fraud indicators.
-
-🔍 *What I check:*
-• Sender authenticity
-• Message structure
-• Scam patterns
-• Link safety
-• Social engineering tactics
+1. Forward or paste the suspicious SMS
+2. I'll ask for the sender name
+3. Get instant fraud analysis
 
 💡 *Example:*
-Just paste the message you received:
-_"URGENT: Your M-PESA account will be suspended..."_
+You: _Confirmed. Ksh5000 paid..._
+Bot: Who sent this message?
+You: _MPESA_
+Bot: ✅ Analysis complete!
 
-⚡ *Quick commands:*
+🔍 *Commands:*
 • HELP - Show this message
 • ABOUT - Learn more
 
-_Protecting Kenyans from SMS fraud, one message at a time._"""
+_Protecting Kenya from SMS fraud_"""
 
 
 def format_about_message():
-    """About/info message"""
-    
-    return """ℹ️ *About M-PESA Fraud Detector*
+    """About message"""
+    return """ℹ️ *About This Bot*
 
-This bot uses advanced AI to detect fraudulent M-PESA and Safaricom messages.
-
-🎯 *Accuracy:* 95%+ fraud detection rate
-🛡️ *Privacy:* Messages analyzed in real-time, not stored
-🚀 *Speed:* Results in under 3 seconds
+🤖 AI-powered fraud detection
+🎯 95%+ accuracy rate
+⚡ Real-time analysis
+🔒 Privacy-focused (no data stored)
 
 ⚠️ *Disclaimer:*
-This is an automated analysis tool. Always verify with official Safaricom channels (100, 200, 234) if unsure.
+This is an automated tool. Always verify suspicious messages with official Safaricom:
+• 100 (Prepay)
+• 200 (Postpay)  
+• 234 (M-PESA)
 
-*Official Safaricom Contacts:*
-• Customer Care: 100 (prepay), 200 (postpay)
-• M-PESA: 234
-• Website: safaricom.co.ke
+🌐 *Official:* safaricom.co.ke
 
-🔐 *Security Tips:*
-1. Never share your M-PESA PIN
-2. Don't click suspicious links
-3. Safaricom never asks for fees to claim prizes
-4. Always verify sender before acting
-
-_Built with ❤️ for Kenya_"""
+_Built for Kenya 🇰🇪_"""
 
 
 # ============================================================================
-# WHATSAPP WEBHOOK ENDPOINT
+# MAIN WEBHOOK
 # ============================================================================
-
-def is_valid_sender(sender_text):
-    sender_text = sender_text.strip()
-
-    # Too long → not a sender
-    if len(sender_text) > 20:
-        return False
-
-    # Contains spaces → likely not sender
-    if " " in sender_text:
-        return False
-
-    # Must be ALL CAPS or digits
-    if not sender_text.replace("-", "").isalnum():
-        return False
-
-    # Common non-sender replies
-    if sender_text.lower() in {"ok", "okay", "yes", "no", "thanks", "help"}:
-        return False
-
-    return True
-
-
 
 @app.route('/whatsapp', methods=['POST'])
 def whatsapp_webhook():
-        model = get_detector()
-
-        resp = MessagingResponse()
-        msg = resp.message()
-
-        if model is None:
-            msg.body("⚠️ Bot is starting. Please try again in a few seconds.")
-            return str(resp)
-
-        # WhatsApp user ID (this is the session key)
-        user_id = request.values.get('From', '')
-        incoming_msg = request.values.get('Body', '').strip()
-
-        if not incoming_msg:
-            msg.body("Please send a message to analyze.")
-            return str(resp)
-
-        session = user_sessions.get(user_id)
-
-     
-        if not is_valid_sender(incoming_msg):
+    """Main WhatsApp webhook handler"""
+    
+    # Get detector (loads models if needed)
+    model = get_detector()
+    
+    # Create response
+    resp = MessagingResponse()
+    msg = resp.message()
+    
+    # Check if models loaded
+    if model is None:
+        msg.body("⚠️ Bot is starting. Please try again in 10 seconds.")
+        return str(resp)
+    
+    # Get user info
+    user_id = request.values.get('From', '')
+    incoming_msg = request.values.get('Body', '').strip()
+    
+    logger.info(f"📱 Message from {user_id}: {incoming_msg[:50]}...")
+    
+    # Empty message
+    if not incoming_msg:
+        msg.body("Please send me the suspicious message to analyze. 📱")
+        return str(resp)
+    
+    # ========== COMMAND HANDLING ==========
+    
+    incoming_lower = incoming_msg.lower()
+    
+    if incoming_lower in ['help', 'start', 'hi', 'hello', 'menu']:
+        msg.body(format_help_message())
+        return str(resp)
+    
+    if incoming_lower in ['about', 'info']:
+        msg.body(format_about_message())
+        return str(resp)
+    
+    # ========== SESSION MANAGEMENT ==========
+    
+    # Check if user has an ongoing session
+    session = user_sessions.get(user_id)
+    
+    if session and 'waiting_for_sender' in session:
+        # USER IS REPLYING WITH SENDER ID
+        
+        # Validate sender format
+        if not is_valid_sender_format(incoming_msg):
             msg.body(
                 "⚠️ *Invalid sender format*\n\n"
-                "Please reply with the *sender name only*, exactly as shown in the SMS.\n\n"
-                "_Examples: MPESA, SAFARICOM, EQUITY, 0722XXXXXX_"
+                "Please reply with the sender name exactly as shown in the SMS.\n\n"
+                "✅ *Examples:*\n"
+                "• MPESA\n"
+                "• SAFARICOM\n"
+                "• EQUITY\n"
+                "• 0722000000\n\n"
+                "❌ *Not valid:*\n"
+                "• \"It's from MPESA\" (too many words)\n"
+                "• \"ok\" (not a sender)"
             )
             return str(resp)
-
+        
+        # Extract saved message
+        message_text = session['message_text']
         sender_id = incoming_msg.strip().upper()
-        message_text = session.get('message_text')
-
-        # Clear session only AFTER valid sender
+        
+        logger.info(f"🔍 Analyzing: sender={sender_id}, msg_length={len(message_text)}")
+        
+        # Clear session
         user_sessions.pop(user_id, None)
-
-        result = model.predict(message_text, sender_id)
-        msg.body(format_whatsapp_response(result))
+        
+        # Run fraud detection
+        try:
+            result = model.predict(message_text, sender_id)
+            msg.body(format_whatsapp_response(result))
+            logger.info(f"✅ Analysis complete: {result['risk_level']}")
+        except Exception as e:
+            logger.error(f"❌ Prediction error: {e}", exc_info=True)
+            msg.body("⚠️ Error analyzing message. Please try again.")
+        
         return str(resp)
+    
+    else:
+        # USER IS SENDING A NEW MESSAGE TO ANALYZE
+        
+        # Try to auto-extract sender
+        auto_sender, cleaned_message = extract_sender_from_message(incoming_msg)
+        
+        if auto_sender:
+            # We found the sender in the message!
+            logger.info(f"✅ Auto-extracted sender: {auto_sender}")
+            
+            try:
+                result = model.predict(cleaned_message, auto_sender)
+                msg.body(format_whatsapp_response(result))
+                logger.info(f"✅ Analysis complete: {result['risk_level']}")
+            except Exception as e:
+                logger.error(f"❌ Prediction error: {e}", exc_info=True)
+                msg.body("⚠️ Error analyzing message. Please try again.")
+            
+            return str(resp)
+        
+        else:
+            # Could not auto-extract sender, ask user
+            user_sessions[user_id] = {
+                'message_text': incoming_msg,
+                'waiting_for_sender': True,
+                'timestamp': request.values.get('MessageSid')
+            }
+            
+            msg.body(
+                "📥 *Message received!*\n\n"
+                "Who sent this message? Reply with the sender name exactly as shown.\n\n"
+                "💡 *Examples:*\n"
+                "• MPESA\n"
+                "• SAFARICOM\n"
+                "• EQUITY\n"
+                "• 0722000000\n"
+                "• M-PESA\n\n"
+                "_Just type the sender name and send_"
+            )
+            
+            return str(resp)
 
-
-           
 
 # ============================================================================
-# HEALTH CHECK ENDPOINT
+# HEALTH CHECK
 # ============================================================================
 
 @app.route('/health', methods=['GET'])
 def health_check():
-    """Simple health check endpoint"""
+    """Health check endpoint"""
+    model = get_detector()
     return {
         'status': 'healthy',
-        'models_loaded': {
-            'transaction': detector.transaction_model is not None,
-            'promotion': detector.promotion_model is not None
-        }
-    }
+        'models_loaded': model is not None
+    }, 200
 
 
 @app.route('/', methods=['GET'])
 def home():
-    """Home page with setup instructions"""
-    
+    """Home page"""
     return """
     <html>
-    <head><title>M-PESA Fraud Detector Bot</title></head>
-    <body style="font-family: Arial; max-width: 800px; margin: 50px auto; padding: 20px;">
-        <h1>🛡️ M-PESA Fraud Detector WhatsApp Bot</h1>
-        
-        <h2>✅ Bot is Running!</h2>
+    <head>
+        <title>M-PESA Fraud Detector Bot</title>
+        <style>
+            body { font-family: Arial; max-width: 800px; margin: 50px auto; padding: 20px; }
+            .status { color: green; font-weight: bold; }
+        </style>
+    </head>
+    <body>
+        <h1>🛡️ M-PESA Fraud Detector</h1>
+        <h2 class="status">✅ Bot is Running!</h2>
         
         <h3>📱 How to Use:</h3>
         <ol>
-            <li>Add this WhatsApp number to your contacts</li>
+            <li>Add the WhatsApp number to your contacts</li>
             <li>Send any suspicious M-PESA/Safaricom message</li>
+            <li>Reply with the sender name when prompted</li>
             <li>Get instant fraud analysis</li>
         </ol>
         
-        <h3>🔧 Setup Status:</h3>
+        <h3>🔗 Endpoints:</h3>
         <ul>
-            <li>Flask Server: <strong style="color: green;">✓ Running</strong></li>
-            <li>Transaction Model: <strong style="color: green;">✓ Loaded</strong></li>
-            <li>Promotion Model: <strong style="color: green;">✓ Loaded</strong></li>
+            <li><code>/whatsapp</code> - Webhook endpoint</li>
+            <li><code>/health</code> - Health check</li>
         </ul>
         
-        <h3>🌐 Webhook URL:</h3>
-        <code>https://your-domain.com/whatsapp</code>
-        
-        <p><em>Configure this URL in your Twilio console</em></p>
-        
         <hr>
-        <p><small>M-PESA Fraud Detector v1.0 | Built with Flask + Twilio</small></p>
+        <p><small>M-PESA Fraud Detector v2.0 | Built with Flask + Twilio</small></p>
     </body>
     </html>
     """
 
 
 # ============================================================================
-# MAIN ENTRY POINT
+# MAIN
 # ============================================================================
 
 if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    
     print("="*70)
     print("🚀 M-PESA FRAUD DETECTOR WHATSAPP BOT")
     print("="*70)
-    print(f"\n📱 WhatsApp webhook: http://localhost:5000/whatsapp")
-    print(f"🏥 Health check: http://localhost:5000/health")
-    print(f"\n💡 To expose locally, use ngrok: ngrok http 5000")
+    print(f"\n📱 Webhook: http://localhost:{port}/whatsapp")
+    print(f"🏥 Health: http://localhost:{port}/health")
     print("\n" + "="*70 + "\n")
     
-    # Run Flask app
-    app.run(
-        host='0.0.0.0',  # Listen on all interfaces
-        port=5000,
-        debug=True
-    )
+    app.run(host='0.0.0.0', port=port, debug=False)
