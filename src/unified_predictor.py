@@ -564,9 +564,27 @@ class UnifiedFraudDetector:
         ])
         composite['fraud_risk_score'] = fraud_score
         composite['high_fraud_risk'] = int(fraud_score >= 4)
+
+        if features.get('has_legit_domain', 0):
+            features['fraud_risk_score'] = max(
+                0,
+                features.get('fraud_risk_score', 0) - 2
+            )
+
         
         return {**features, **composite}
     
+    def _is_high_confidence_legit(self, features):
+        legit_signals = sum([
+            features.get('is_legit_sender', 0),
+            features.get('has_legit_domain', 0),
+            features.get('has_ussd_code', 0),
+            features.get('has_sms_shortcode', 0),
+            features.get('has_safaricom_brand', 0),
+            features.get('mentions_terms', 0)
+        ])
+        return legit_signals >= 3
+
     
 
         ##end _extract_promotional_features
@@ -592,14 +610,15 @@ class UnifiedFraudDetector:
             'win', 'won', 'winner', 'prize', 'congratulations',
             'promotion', 'competition', 'reward'
         ])
-        
+                
         if is_transaction:
             return 'transaction'
-        elif is_promotion:
+
+        if is_promotion and not is_transaction:
             return 'promotion'
-        else:
-            # Default to transaction (safer choice)
-            return 'transaction'
+
+        return 'transaction'
+
     
     def predict(self, message_text, sender_id='UNKNOWN', all_features=None):
         """
@@ -621,6 +640,15 @@ class UnifiedFraudDetector:
             features = self._extract_promotional_features(message_text, sender_id, all_features)
         else:
             features = self._extract_transaction_features(message_text, sender_id)
+
+
+        if msg_type == 'promotion' and self._is_high_confidence_legit(features):
+            return {
+                'risk_level': '🟢 LOW',
+                'fraud_probability': 0.05,
+                'recommendation': '✅ Legitimate Safaricom promotional message.'
+            }
+
         
         # Add message_text column (required by pipeline)
         features['message_text'] = message_text
@@ -654,16 +682,16 @@ class UnifiedFraudDetector:
             }
         
         # Map probability to risk level
-        if prob >= 0.8:
+        if prob >= 0.85:
             risk_level = '🔴 CRITICAL'
             recommendation = '🚨 SCAM DETECTED! Do NOT send money or click links. Block this number immediately.'
-        elif prob >= 0.6:
+        elif prob >= 0.7:
             risk_level = '🟠 HIGH'
             recommendation = '⚠️ Highly suspicious. This matches known fraud patterns. Verify with official Safaricom (100/234).'
-        elif prob >= 0.4:
+        elif prob >= 0.5:
             risk_level = '🟡 MEDIUM'
             recommendation = '⚡ Suspicious elements detected. Be cautious. Do not share personal info.'
-        elif prob >= 0.2:
+        elif prob >= 0.3:
             risk_level = '🟢 LOW-MEDIUM'
             recommendation = '👀 Some unusual patterns. If unsure, call Safaricom 100 to verify.'
         else:
