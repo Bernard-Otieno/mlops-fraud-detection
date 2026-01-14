@@ -280,7 +280,7 @@ class UnifiedFraudDetector:
         ]
         
         features = {}
-
+        
         if all_features is None:
             all_features = features
 
@@ -601,7 +601,7 @@ class UnifiedFraudDetector:
             # Default to transaction (safer choice)
             return 'transaction'
     
-    def predict(self, message_text, sender_id='UNKNOWN'):
+    def predict(self, message_text, sender_id='UNKNOWN', all_features=None):
         """
         Main prediction method
         
@@ -618,7 +618,7 @@ class UnifiedFraudDetector:
         
         # Extract features
         if msg_type == 'promotion':
-            features = self._extract_promotional_features(message_text, sender_id)
+            features = self._extract_promotional_features(message_text, sender_id, all_features)
         else:
             features = self._extract_transaction_features(message_text, sender_id)
         
