@@ -3,6 +3,7 @@ M-PESA Fraud Detection WhatsApp Bot
 Uses Twilio + Flask to provide fraud analysis via WhatsApp
 """
 
+from venv import logger
 from flask import Flask, request
 from twilio.twiml.messaging_response import MessagingResponse
 from twilio.rest import Client
@@ -10,6 +11,8 @@ from twilio.rest import Client
 import os
 import sys
 from pathlib import Path
+
+user_sessions = {}
 
 # Add project root to path
 project_root = str(Path(__file__).parent.parent)
@@ -159,61 +162,60 @@ _Built with ❤️ for Kenya_"""
 
 @app.route('/whatsapp', methods=['POST'])
 def whatsapp_webhook():
-    """
-    Main webhook endpoint that Twilio calls when messages arrive
-    """
-    
-    # Get incoming message details
-    incoming_msg = request.values.get('Body', '').strip()
-    sender_number = request.values.get('From', '')
-    
-    print(f"\n📱 New message from {sender_number}")
-    print(f"   Message: {incoming_msg[:100]}...")
-    
-    # Create response object
-    resp = MessagingResponse()
-    msg = resp.message()
-    
-    # Handle empty messages
-    if not incoming_msg:
-        msg.body("Please send me the suspicious message you want me to analyze. 📱")
-        return str(resp)
-    
-    # Handle commands
-    incoming_lower = incoming_msg.lower()
-    
-    if incoming_lower in ['help', 'start', 'hi', 'hello', 'menu']:
-        msg.body(format_help_message())
-        return str(resp)
-    
-    if incoming_lower in ['about', 'info']:
-        msg.body(format_about_message())
-        return str(resp)
-    
-    # Analyze the message for fraud
-    try:
-        print("   🔍 Analyzing message...")
-        
-        # Extract sender if present, otherwise use UNKNOWN
-        sender_id = extract_sender_from_message(incoming_msg)
-        
-        # Run fraud detection
-        result = detector.predict(incoming_msg, sender_id)
-        
-        print(f"   ✅ Analysis complete: {result['risk_level']}")
-        
-        # Format and send response
-        response_text = format_whatsapp_response(result)
-        msg.body(response_text)
-        
-    except Exception as e:
-        print(f"   ❌ Error: {e}")
-        msg.body(
-            "⚠️ Sorry, I encountered an error analyzing that message. "
-            "Please try again or send HELP for assistance."
-        )
-    
-    return str(resp)
+        model = detector
+
+        resp = MessagingResponse()
+        msg = resp.message()
+
+        if model is None:
+            msg.body("⚠️ Bot is starting. Please try again in a few seconds.")
+            return str(resp)
+
+        # WhatsApp user ID (this is the session key)
+        user_id = request.values.get('From', '')
+        incoming_msg = request.values.get('Body', '').strip()
+
+        if not incoming_msg:
+            msg.body("Please send a message to analyze.")
+            return str(resp)
+
+        session = user_sessions.get(user_id)
+
+        try:
+            # =========================
+            # STEP 2: User sending sender
+            # =========================
+            if session and session.get('awaiting_sender'):
+                sender_id = incoming_msg.strip().upper()
+                message_text = session.get('message_text')
+
+                # Clear session
+                user_sessions.pop(user_id, None)
+
+                result = model.predict(message_text, sender_id)
+                msg.body(format_whatsapp_response(result))
+                return str(resp)
+
+            # =========================
+            # STEP 1: User sent SMS text
+            # =========================
+            else:
+                user_sessions[user_id] = {
+                    'awaiting_sender': True,
+                    'message_text': incoming_msg
+                }
+
+                msg.body(
+                    "📨 *Sender required*\n\n"
+                    "Please reply with the *sender name* exactly as shown in the SMS.\n\n"
+                    "_Examples: MPESA, SAFARICOM, EQUITY, 0722XXXXXX_"
+                )
+                return str(resp)
+
+        except Exception as e:
+            logger.error(f"❌ Prediction Error: {e}", exc_info=True)
+            msg.body("⚠️ Error analyzing message. Please try again.")
+            return str(resp)
 
 
 # ============================================================================

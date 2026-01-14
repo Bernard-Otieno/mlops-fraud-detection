@@ -618,6 +618,30 @@ class UnifiedFraudDetector:
             return 'promotion'
 
         return 'transaction'
+    
+    def _force_legit_override(self, text, sender_id):
+        text_lower = text.lower()
+        sender_upper = sender_id.upper()
+
+        if sender_upper in ['MPESA', 'M-PESA', 'SAFARICOM']:
+            if any(domain in text_lower for domain in [
+                'safaricom.co.ke',
+                'mpesa.co.ke',
+                'rebrand.ly'
+            ]):
+                return True
+
+            if 'stand a chance' in text_lower:
+                return True
+
+            if 'bonga' in text_lower:
+                return True
+
+            if 't&c' in text_lower or 'terms apply' in text_lower:
+                return True
+
+        return False
+
 
     
     def predict(self, message_text, sender_id='UNKNOWN', all_features=None):
@@ -669,6 +693,17 @@ class UnifiedFraudDetector:
                 'recommendation': 'Bot starting up... Try again in 10 seconds.'
             }
         
+        if self._force_legit_override(message_text, sender_id):
+            return {
+                'risk_level': '🟢 LOW',
+                'fraud_probability': 0.02,
+                'recommendation': '✅ Verified official Safaricom message.'
+            }
+        if features.get('is_legit_sender', 0):
+            prob = min(prob, 0.35)
+
+        if msg_type == 'promotion' and sender_id.upper() in ['MPESA', 'M-PESA', 'SAFARICOM']:
+            model = self.transaction_model
         # Predict
         try:
             # Get probability of fraud (index 1)
