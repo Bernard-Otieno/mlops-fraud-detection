@@ -3,7 +3,8 @@ M-PESA Fraud Detection WhatsApp Bot
 Uses Twilio + Flask to provide fraud analysis via WhatsApp
 """
 
-from venv import logger
+import logging
+logger = logging.getLogger(__name__)
 from flask import Flask, request
 from twilio.twiml.messaging_response import MessagingResponse
 from twilio.rest import Client
@@ -80,26 +81,26 @@ def format_whatsapp_response(result):
     return response
 
 
-def extract_sender_from_message(message_text):
-    """
-    Try to extract sender ID from forwarded message
-    Users might forward messages like: "From: MPESA - Confirmed..."
-    """
+# def extract_sender_from_message(message_text):
+#     """
+#     Try to extract sender ID from forwarded message
+#     Users might forward messages like: "From: MPESA - Confirmed..."
+#     """
     
-    # Common patterns
-    patterns = [
-        r'(?:From|Sender|FROM|SENDER):\s*([A-Z0-9-]+)',
-        r'^([A-Z]{3,})\s*[-:]',  # MPESA: or SAFARICOM-
-    ]
+#     # Common patterns
+#     patterns = [
+#         r'(?:From|Sender|FROM|SENDER):\s*([A-Z0-9-]+)',
+#         r'^([A-Z]{3,})\s*[-:]',  # MPESA: or SAFARICOM-
+#     ]
     
-    import re
-    for pattern in patterns:
-        match = re.search(pattern, message_text)
-        if match:
-            return match.group(1).strip()
+#     import re
+#     for pattern in patterns:
+#         match = re.search(pattern, message_text)
+#         if match:
+#             return match.group(1).strip()
     
-    # Default if can't extract
-    return 'UNKNOWN'
+#     # Default if can't extract
+#     return 'UNKNOWN'
 
 
 def format_help_message():
@@ -160,6 +161,29 @@ _Built with ❤️ for Kenya_"""
 # WHATSAPP WEBHOOK ENDPOINT
 # ============================================================================
 
+def is_valid_sender(sender_text):
+    sender_text = sender_text.strip()
+
+    # Too long → not a sender
+    if len(sender_text) > 20:
+        return False
+
+    # Contains spaces → likely not sender
+    if " " in sender_text:
+        return False
+
+    # Must be ALL CAPS or digits
+    if not sender_text.replace("-", "").isalnum():
+        return False
+
+    # Common non-sender replies
+    if sender_text.lower() in {"ok", "okay", "yes", "no", "thanks", "help"}:
+        return False
+
+    return True
+
+
+
 @app.route('/whatsapp', methods=['POST'])
 def whatsapp_webhook():
         model = detector
@@ -181,42 +205,27 @@ def whatsapp_webhook():
 
         session = user_sessions.get(user_id)
 
-        try:
-            # =========================
-            # STEP 2: User sending sender
-            # =========================
-            if session and session.get('awaiting_sender'):
-                sender_id = incoming_msg.strip().upper()
-                message_text = session.get('message_text')
-
-                # Clear session
-                user_sessions.pop(user_id, None)
-
-                result = model.predict(message_text, sender_id)
-                msg.body(format_whatsapp_response(result))
-                return str(resp)
-
-            # =========================
-            # STEP 1: User sent SMS text
-            # =========================
-            else:
-                user_sessions[user_id] = {
-                    'awaiting_sender': True,
-                    'message_text': incoming_msg
-                }
-
-                msg.body(
-                    "📨 *Sender required*\n\n"
-                    "Please reply with the *sender name* exactly as shown in the SMS.\n\n"
-                    "_Examples: MPESA, SAFARICOM, EQUITY, 0722XXXXXX_"
-                )
-                return str(resp)
-
-        except Exception as e:
-            logger.error(f"❌ Prediction Error: {e}", exc_info=True)
-            msg.body("⚠️ Error analyzing message. Please try again.")
+     
+        if not is_valid_sender(incoming_msg):
+            msg.body(
+                "⚠️ *Invalid sender format*\n\n"
+                "Please reply with the *sender name only*, exactly as shown in the SMS.\n\n"
+                "_Examples: MPESA, SAFARICOM, EQUITY, 0722XXXXXX_"
+            )
             return str(resp)
 
+        sender_id = incoming_msg.strip().upper()
+        message_text = session.get('message_text')
+
+        # Clear session only AFTER valid sender
+        user_sessions.pop(user_id, None)
+
+        result = model.predict(message_text, sender_id)
+        msg.body(format_whatsapp_response(result))
+        return str(resp)
+
+
+           
 
 # ============================================================================
 # HEALTH CHECK ENDPOINT
