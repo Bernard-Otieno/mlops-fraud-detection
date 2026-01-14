@@ -2,9 +2,15 @@
 M-PESA Fraud Detection WhatsApp Bot
 Uses Twilio + Flask to provide fraud analysis via WhatsApp
 """
-
 import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
+
 logger = logging.getLogger(__name__)
+
 from flask import Flask, request
 from twilio.twiml.messaging_response import MessagingResponse
 from twilio.rest import Client
@@ -33,10 +39,15 @@ TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
 # Initialize Flask app
 app = Flask(__name__)
 
-# Initialize fraud detector (loads models once at startup)
-print("🔄 Loading fraud detection models...")
-detector = UnifiedFraudDetector()
-print("✅ Models loaded successfully!\n")
+detector = None
+
+def get_detector():
+    global detector
+    if detector is None:
+        logger.info("🔄 Loading fraud detection models...")
+        detector = UnifiedFraudDetector()
+        logger.info("✅ Models loaded successfully!")
+    return detector
 
 # ============================================================================
 # HELPER FUNCTIONS
@@ -186,7 +197,7 @@ def is_valid_sender(sender_text):
 
 @app.route('/whatsapp', methods=['POST'])
 def whatsapp_webhook():
-        model = detector
+        model = get_detector()
 
         resp = MessagingResponse()
         msg = resp.message()
