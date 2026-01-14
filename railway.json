@@ -5,7 +5,7 @@
     "buildCommand": "pip install -r requirements.txt && python src/train_on_railway.py"
   },
   "deploy": {
-    "startCommand": "python whatsapp_fraud_bot_production.py",
+    "startCommand": "python src/whatsapp_fraud_bot_production.py",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
   }
