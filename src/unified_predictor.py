@@ -22,7 +22,7 @@ class UnifiedFraudDetector:
         
         # Load models
         self.transaction_model = self._load_model('fraud_detector_pipeline.joblib')
-        self.promotion_model = self._load_model('promotion_fraud_detector.joblib')
+        self.promotion_model = self._load_model('promotion_fraud_model.joblib')
         
         if not self.transaction_model and not self.promotion_model:
             logger.error("❌ CRITICAL: No models loaded!")
