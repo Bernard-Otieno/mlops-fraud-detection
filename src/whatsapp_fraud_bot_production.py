@@ -439,20 +439,23 @@ def whatsapp_webhook():
             return str(resp)
     
     # ========== MESSAGE LENGTH CHECK ==========
-    if not is_valid_message_length(incoming_msg):
-        if len(incoming_msg) < 2:
-            msg.body(
-                "⚠️ *Message too short*\n\n"
-                "Please send the complete SMS message you want me to analyze.\n\n"
-                "Type HELP if you need instructions!"
-            )
-        else:
-            msg.body(
-                "⚠️ *Message too long*\n\n"
-                "Please send one message at a time (max 1000 characters).\n\n"
-                "If you have multiple messages, send them separately!"
-            )
-        return str(resp)
+    session = get_or_create_session(user_id)
+
+    if not session.get('waiting_for_sender'):
+        if not is_valid_message_length(incoming_msg):
+            if len(incoming_msg) < 10:
+                msg.body(
+                    "⚠️ *Message too short*\n\n"
+                    "Please send the complete SMS message you want me to analyze.\n\n"
+                    "Type HELP if you need instructions!"
+                )
+            else:
+                msg.body(
+                    "⚠️ *Message too long*\n\n"
+                    "Please send one message at a time (max 1000 characters)."
+                )
+            return str(resp)
+
     
     # ========== SESSION MANAGEMENT ==========
     session = get_or_create_session(user_id)
