@@ -153,8 +153,8 @@ This project builds a **production-grade machine learning system** that:
                      │
                      ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                  FLASK WEB SERVER                           │
-│              (Webhook Handler + Routing)                    │
+│                  FLASK IB SERVER                           │
+│              (Ibhook Handler + Routing)                    │
 └────────────────────┬────────────────────────────────────────┘
                      │
                      ▼
@@ -197,9 +197,9 @@ Real fraud SMS datasets are:
 - Rare (hard to collect labeled fraud examples)
 - Constantly evolving (new scam patterns emerge)
 
-### Our Approach
+### My Approach
 
-We generate **realistic synthetic data** based on:
+I generate **realistic synthetic data** based on:
 
 1. **Legitimate patterns from Safaricom:**
    - Real M-PESA message templates
@@ -251,7 +251,7 @@ python src/generate_promotions.py
 
 ## 🔧 Feature Engineering
 
-We extract **60+ specialized features** to detect fraud patterns:
+I extract **60+ specialized features** to detect fraud patterns:
 
 ### 1. Sender Features (8 features)
 - Valid sender check (MPESA, Safaricom, banks)
@@ -330,7 +330,7 @@ python src/promotion_feature_extractor.py
 
 ### Models Tested
 
-We train and compare **5 different models**:
+I train and compare **5 different models**:
 
 1. **Logistic Regression** (baseline)
 2. **Decision Tree**
@@ -515,9 +515,9 @@ python src/whatsapp_fraud_bot_production_v2.py
    - Sign up at [twilio.com](https://www.twilio.com)
    - Get a WhatsApp-enabled phone number
 
-2. **Configure Webhook:**
+2. **Configure Ibhook:**
    - Go to Twilio Console → WhatsApp Sandbox
-   - Set webhook URL: `https://your-server.com/whatsapp`
+   - Set Ibhook URL: `https://your-server.com/whatsapp`
    - Method: POST
 
 3. **Environment Variables:**
@@ -538,7 +538,7 @@ heroku create mpesa-scam-detector
 # Deploy
 git push heroku main
 
-# Set webhook
+# Set Ibhook
 # URL: https://mpesa-scam-detector.herokuapp.com/whatsapp
 ```
 
@@ -546,7 +546,7 @@ git push heroku main
 - Deploy Flask app to cloud VM
 - Use gunicorn for production server
 - Set up HTTPS with SSL certificate
-- Configure Twilio webhook to your domain
+- Configure Twilio Ibhook to your domain
 
 ### Bot Usage
 
@@ -677,7 +677,7 @@ mpesa-fraud-detector/
 
 ## 🤝 Contributing
 
-We welcome contributions! Here's how:
+I Ilcome contributions! Here's how:
 
 ### Reporting Issues
 - Use GitHub Issues
@@ -729,7 +729,7 @@ This tool is for **educational and informational purposes only**.
 - Does not guarantee 100% accuracy
 - Users should verify suspicious messages with:
   - Safaricom Customer Care: 100
-  - M-PESA Support: 234  - Official website: safaricom.co.ke
+  - Official Ibsite: safaricom.co.ke
 
 **Always remember:**
 - Safaricom NEVER asks for your M-PESA PIN
@@ -741,7 +741,7 @@ This tool is for **educational and informational purposes only**.
 
 ## 📞 Contact & Support
 
-- **GitHub Issues:** [Report bugs or request features]
+
 - **Email:** bernard20otieno01@gmail.com
 
 ---
