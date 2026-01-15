@@ -504,7 +504,7 @@ See [WhatsApp Bot Deployment](#-whatsapp-bot-deployment) section below.
 
 ```bash
 # Run the Flask server
-python whatsapp_fraud_bot_production_v2.py
+python src/whatsapp_fraud_bot_production_v2.py
 
 # Server starts on http://localhost:5000
 ```
@@ -704,7 +704,7 @@ We welcome contributions! Here's how:
 This project is licensed under the **MIT License**.
 
 ```
-Copyright (c) 2024 M-PESA Fraud Detector Team
+Copyright (c) 2024 SMS Scam Detector Team
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -729,8 +729,7 @@ This tool is for **educational and informational purposes only**.
 - Does not guarantee 100% accuracy
 - Users should verify suspicious messages with:
   - Safaricom Customer Care: 100
-  - M-PESA Support: 234
-  - Official website: safaricom.co.ke
+  - M-PESA Support: 234  - Official website: safaricom.co.ke
 
 **Always remember:**
 - Safaricom NEVER asks for your M-PESA PIN
@@ -743,8 +742,7 @@ This tool is for **educational and informational purposes only**.
 ## 📞 Contact & Support
 
 - **GitHub Issues:** [Report bugs or request features]
-- **Email:** support@mpesa-fraud-detector.com
-- **Documentation:** [Full docs](https://docs.mpesa-fraud-detector.com)
+- **Email:** bernard20otieno01@gmail.com
 
 ---
 
