@@ -440,7 +440,7 @@ def whatsapp_webhook():
     
     # ========== MESSAGE LENGTH CHECK ==========
     if not is_valid_message_length(incoming_msg):
-        if len(incoming_msg) < 10:
+        if len(incoming_msg) < 2:
             msg.body(
                 "⚠️ *Message too short*\n\n"
                 "Please send the complete SMS message you want me to analyze.\n\n"
